@@ -16,7 +16,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -32,12 +31,12 @@ import androidx.compose.ui.text.withStyle
 import kotlinx.coroutines.delay
 import java.util.Date
 import java.util.Locale
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Pared-back tile layout: one rounded strip of three tiles (mode, power ring, battery),
- * speed and trip in the middle, and a quiet status line (clock, riding time, motor temp).
+ * Pared-back tile layout: one rounded strip of three tiles (mode, speed, battery), a
+ * power/regen bar with the trip beneath it, and a quiet status line (clock, riding time,
+ * motor temp).
  */
 @Composable
 internal fun TilesRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, onHome: () -> Unit) {
@@ -45,8 +44,8 @@ internal fun TilesRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, onH
     val measurer = rememberTextMeasurer()
     val icons = rememberRideIcons()
     val pulse = rememberWarningPulse()
-    val torqueFrac by animateFloatAsState(d.torque, tween(150), label = "ring")
-    val ring = introSweep(intro, torqueFrac)
+    val torqueFrac by animateFloatAsState(d.torque, tween(120), label = "torque")
+    val barFrac = introSweep(intro, torqueFrac)
     val stripIn = introPhase(intro, 0f, 0.45f)
     val centerIn = introPhase(intro, 0.15f, 0.65f)
 
@@ -92,44 +91,31 @@ internal fun TilesRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, onH
             drawIcon(icons.bolt, Offset(modePill.left + modePill.width * 0.32f, modePill.center.y), 0.1f * h, d.modeColor ?: c.green)
             drawCentered(measurer, AnnotatedString(d.modeNumber.toString()), wide(0.105f * h, c.text), Offset(modePill.left + modePill.width * 0.62f, modePill.center.y))
 
-            // Power ring: fills clockwise as you pull, anticlockwise (green) on regen
-            val ringCenter = Offset(strip.center.x, strip.top + strip.height * 0.42f)
-            val r = 0.085f * h
-            val stroke = 0.022f * h
-            drawCircle(c.textSoft.copy(alpha = 0.28f), r, ringCenter, style = Stroke(stroke))
-            if (abs(ring) > 0.003f) {
-                drawArc(
-                    if (ring > 0f) c.text else c.green,
-                    -90f, 360f * ring, false,
-                    Offset(ringCenter.x - r, ringCenter.y - r), Size(2 * r, 2 * r),
-                    style = Stroke(stroke, cap = StrokeCap.Round),
-                )
-            }
-            val kw = d.powerKw?.let { String.format(Locale.US, if (abs(it) < 10) "%.1f kW" else "%.0f kW", it) } ?: "-- kW"
-            drawCentered(measurer, AnnotatedString(kw), wide(0.038f * h, c.label, 0.05f), Offset(ringCenter.x, strip.top + strip.height * 0.85f))
+            // Speed in the centre tile, unit underneath
+            drawCentered(
+                measurer, AnnotatedString(d.speed?.roundToInt()?.toString() ?: "--"),
+                wide(0.16f * h, if (d.speed == null) c.label else c.text),
+                Offset(strip.center.x, strip.top + strip.height * 0.43f),
+            )
+            drawCentered(
+                measurer, AnnotatedString(d.speedUnit),
+                wide(0.036f * h, c.label, 0.08f),
+                Offset(strip.center.x, strip.top + strip.height * 0.84f),
+            )
 
             // Battery: pill in the battery colour with a small cell glyph
             drawBatteryPill(measurer, c, d.battery, Offset(strip.right - tileW / 2f, strip.center.y), 0.21f * w, 0.15f * h)
         }
 
-        // Speed and trip
+        // Power / regen bar with the trip beneath it
         Canvas(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    alpha = centerIn
-                    val s = 0.92f + 0.08f * centerIn
-                    scaleX = s
-                    scaleY = s
-                },
+                .graphicsLayer { alpha = centerIn },
         ) {
-            val speed = buildAnnotatedString {
-                append(d.speed?.roundToInt()?.toString() ?: "--")
-                withStyle(SpanStyle(fontSize = (0.05f * h).toSp(), color = c.textSoft)) { append(" ${d.speedUnit}") }
-            }
-            drawCentered(measurer, speed, wide(0.17f * h, if (d.speed == null) c.label else c.text), Offset(w / 2f, 0.585f * h))
+            drawPowerBar(measurer, c, barFrac, y = 0.57f * h, x0 = 0.14f * w, x1 = 0.86f * w, thickness = 0.026f * h, labelSize = 0.032f * h)
             val trip = d.trip?.let { String.format(Locale.US, "%.1f %s", it, d.tripUnit) } ?: "-- ${d.tripUnit}"
-            drawCentered(measurer, AnnotatedString("TRIP  $trip"), wide(0.026f * h, c.label, 0.08f), Offset(w / 2f, 0.7f * h))
+            drawCentered(measurer, AnnotatedString("TRIP  $trip"), wide(0.026f * h, c.label, 0.08f), Offset(w / 2f, 0.68f * h))
         }
 
         // Status line and warnings
@@ -155,7 +141,7 @@ internal fun TilesRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, onH
         }
 
         TapTarget(modePill, enabled = true, onClick = onCycleMode)
-        HomeButton(d.stopped, Offset(0.915f * w, 0.585f * h), 0.15f * h, c, onHome)
+        HomeButton(d.stopped, Offset(w - margin - 0.07f * h, 0.8f * h), 0.13f * h, c, onHome)
     }
 }
 

@@ -22,7 +22,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -136,25 +135,7 @@ internal fun MinimalRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
 
         // Power / regen bar and warnings
         Canvas(Modifier.fillMaxSize()) {
-            val y = 0.91f * h
-            val x0 = 0.14f * w
-            val x1 = 0.86f * w
-            val zeroX = x0 + 0.15f * (x1 - x0)
-            val th = 0.02f * h
-            drawRoundRect(c.track, Offset(x0, y - th / 2f), Size(x1 - x0, th), CornerRadius(th / 2f))
-            if (abs(barFrac) > 0.003f) {
-                val (start, end, color) = if (barFrac > 0f) {
-                    Triple(zeroX, zeroX + (x1 - zeroX) * barFrac, c.cyan)
-                } else {
-                    Triple(zeroX - (zeroX - x0) * -barFrac, zeroX, c.green)
-                }
-                drawRoundRect(color.copy(alpha = 0.18f), Offset(start - th, y - th * 1.5f), Size(end - start + 2 * th, th * 3f), CornerRadius(th * 1.5f))
-                drawRoundRect(color, Offset(start, y - th / 2f), Size(end - start, th), CornerRadius(th / 2f))
-            }
-            drawLine(c.textSoft, Offset(zeroX, y - th * 1.6f), Offset(zeroX, y + th * 1.6f), strokeWidth = 0.005f * h)
-            val labelStyle = wide(0.03f * h, c.label, 0.05f)
-            drawCentered(measurer, AnnotatedString("REG"), labelStyle, Offset(x0 - 0.015f * w, y), alignX = 1f)
-            drawCentered(measurer, AnnotatedString("MAX"), labelStyle, Offset(x1 + 0.015f * w, y), alignX = 0f)
+            drawPowerBar(measurer, c, barFrac, y = 0.91f * h, x0 = 0.14f * w, x1 = 0.86f * w, thickness = 0.02f * h, labelSize = 0.03f * h)
 
             drawWarningStack(measurer, icons, c, d.warnings, x = 0.075f * w, y = 0.36f * h, size = 0.12f * h, pulse = pulse)
         }

@@ -78,9 +78,10 @@ import com.vescdash.data.value
 import com.vescdash.ui.MainViewModel
 import com.vescdash.ui.theme.WideFont
 import com.vescdash.vesc.VescProtocol
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Colours shared by both ride styles; one instance per theme. */
+/** Colours shared by all ride styles; one instance per theme. */
 internal class RidePalette(
     val bg: Color,
     val minimalBg: Color,
@@ -390,6 +391,39 @@ internal fun DrawScope.drawCentered(
     } else {
         rotate(rotation, pivot = anchor) { drawText(layout, topLeft = topLeft) }
     }
+}
+
+/**
+ * Horizontal power/regen bar from [x0] to [x1]: zero sits 15 % in from the left, drive fills
+ * right in cyan, regen fills left in green. [frac] is −1 (full regen) … 1 (full drive).
+ */
+internal fun DrawScope.drawPowerBar(
+    m: TextMeasurer,
+    c: RidePalette,
+    frac: Float,
+    y: Float,
+    x0: Float,
+    x1: Float,
+    thickness: Float,
+    labelSize: Float,
+) {
+    val zeroX = x0 + 0.15f * (x1 - x0)
+    val th = thickness
+    drawRoundRect(c.track, Offset(x0, y - th / 2f), Size(x1 - x0, th), CornerRadius(th / 2f))
+    if (abs(frac) > 0.003f) {
+        val (start, end, color) = if (frac > 0f) {
+            Triple(zeroX, zeroX + (x1 - zeroX) * frac, c.cyan)
+        } else {
+            Triple(zeroX - (zeroX - x0) * -frac, zeroX, c.green)
+        }
+        drawRoundRect(color.copy(alpha = 0.18f), Offset(start - th, y - th * 1.5f), Size(end - start + 2 * th, th * 3f), CornerRadius(th * 1.5f))
+        drawRoundRect(color, Offset(start, y - th / 2f), Size(end - start, th), CornerRadius(th / 2f))
+    }
+    drawLine(c.textSoft, Offset(zeroX, y - th * 1.6f), Offset(zeroX, y + th * 1.6f), strokeWidth = th * 0.25f)
+    val labelStyle = wide(labelSize, c.label, 0.05f)
+    val gap = labelSize * 0.9f
+    drawCentered(m, AnnotatedString("REG"), labelStyle, Offset(x0 - gap, y), alignX = 1f)
+    drawCentered(m, AnnotatedString("MAX"), labelStyle, Offset(x1 + gap, y), alignX = 0f)
 }
 
 internal fun DrawScope.drawIcon(p: VectorPainter, center: Offset, size: Float, color: Color) {
