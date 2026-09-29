@@ -7,6 +7,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,6 +29,7 @@ import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -35,11 +40,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -50,7 +57,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.em
@@ -89,6 +101,8 @@ internal class RidePalette(
     val amber: Color,
     val red: Color,
     val cyan: Color,
+    /** Colour of a heat warning at 60 °C; blends toward [red] as it gets hotter. */
+    val heatStart: Color,
     val pill: Color,
     val pillBorder: Color,
     val homeButton: Color,
@@ -104,6 +118,7 @@ internal class RidePalette(
             tick = Color(0xFF4E4E55), tickMajor = Color(0xFFDADADE),
             text = Color(0xFFEDEDF0), textSoft = Color(0xFFB9B9BF),
             green = Color(0xFF3DDC97), amber = Color(0xFFF7931E), red = Color(0xFFF2291E), cyan = Color(0xFF45E3F5),
+            heatStart = Color(0xFFFFD60A),
             pill = Color(0xFF2A2A2D), pillBorder = Color(0xFF414146),
             homeButton = Color(0xFFDADADD), homeIcon = Color(0xFF1A1A1C), watermark = Color(0xFF2A2A2E),
         )
@@ -115,6 +130,7 @@ internal class RidePalette(
             tick = Color(0xFFA9A9B1), tickMajor = Color(0xFF2A2A2E),
             text = Color(0xFF111114), textSoft = Color(0xFF55555C),
             green = Color(0xFF12B06B), amber = Color(0xFFE07800), red = Color(0xFFDE2318), cyan = Color(0xFF0098B8),
+            heatStart = Color(0xFFD9A400),
             pill = Color(0xFFE6E6EA), pillBorder = Color(0xFFCDCDD3),
             homeButton = Color(0xFF26262A), homeIcon = Color(0xFFF2F2F4), watermark = Color(0xFFCFCFD4),
         )
@@ -136,7 +152,27 @@ internal fun batteryColor(pct: Double?, c: RidePalette): Color = when {
     else -> c.red
 }
 
-internal enum class Warning { NO_LINK, BATTERY_LOW, BATTERY_CRITICAL, TEMP_WARN, TEMP_DANGER, FAULT }
+internal sealed interface RideWarning {
+    data object NoLink : RideWarning
+    data class LowBattery(val critical: Boolean) : RideWarning
+    data class ControllerHot(val tempC: Double) : RideWarning
+    data class MotorHot(val tempC: Double) : RideWarning
+    data class Fault(val text: String) : RideWarning
+}
+
+/** Heat icons appear at this temperature in yellow… */
+internal const val HEAT_START_C = 60.0
+/** …and are fully red (and pulsing) at the same danger points the dashboard uses. */
+internal val CONTROLLER_RED_C = Metric.TEMP_FET.defaultThresholds()!!.second
+internal val MOTOR_RED_C = Metric.TEMP_MOTOR.defaultThresholds()!!.second
+
+/** 0 at [HEAT_START_C], 1 at [redAtC]. */
+internal fun heatFraction(tempC: Double, redAtC: Double): Float =
+    ((tempC - HEAT_START_C) / (redAtC - HEAT_START_C)).toFloat().coerceIn(0f, 1f)
+
+/** Yellow at 60 °C, shifting through orange to red at [redAtC]. */
+internal fun heatColor(tempC: Double, redAtC: Double, c: RidePalette): Color =
+    lerp(c.heatStart, c.red, heatFraction(tempC, redAtC))
 
 /** Everything a ride screen shows, already converted to display units. */
 internal class RideData(
@@ -150,8 +186,7 @@ internal class RideData(
     val modeColor: Color?,
     val modeStatus: ModeApplyStatus,
     val rideTimeMs: Long,
-    val warnings: List<Warning>,
-    val faultText: String?,
+    val warnings: List<RideWarning>,
 ) {
     val stopped: Boolean get() = speed == null || speed < 1.0
 }
@@ -172,21 +207,12 @@ internal fun collectRideData(vm: MainViewModel): RideData {
     val battery = t?.let { Metric.BATTERY.value(it, vehicle) }
     val motorMax = (vehicle.motorCurrentMax * vehicle.controllers).coerceAtLeast(1.0)
 
-    val (fetWarn, fetDanger) = Metric.TEMP_FET.defaultThresholds()!!
-    val (motWarn, motDanger) = Metric.TEMP_MOTOR.defaultThresholds()!!
     val warnings = buildList {
-        if (t == null || stale) add(Warning.NO_LINK)
-        if (battery != null && battery < 10) {
-            add(Warning.BATTERY_CRITICAL)
-        } else if (battery != null && battery < 20) {
-            add(Warning.BATTERY_LOW)
-        }
-        if (t != null && (t.tempFet >= fetDanger || t.tempMotor >= motDanger)) {
-            add(Warning.TEMP_DANGER)
-        } else if (t != null && (t.tempFet >= fetWarn || t.tempMotor >= motWarn)) {
-            add(Warning.TEMP_WARN)
-        }
-        if (t != null && t.fault != 0) add(Warning.FAULT)
+        if (t == null || stale) add(RideWarning.NoLink)
+        if (battery != null && battery < 20) add(RideWarning.LowBattery(critical = battery < 10))
+        if (t != null && t.tempFet >= HEAT_START_C) add(RideWarning.ControllerHot(t.tempFet))
+        if (t != null && t.tempMotor >= HEAT_START_C) add(RideWarning.MotorHot(t.tempMotor))
+        if (t != null && t.fault != 0) add(RideWarning.Fault(VescProtocol.faultName(t.fault)))
     }
 
     return RideData(
@@ -200,7 +226,6 @@ internal fun collectRideData(vm: MainViewModel): RideData {
         modeStatus = modeStatus,
         rideTimeMs = rideTimeMs,
         warnings = warnings,
-        faultText = t?.fault?.takeIf { it != 0 }?.let { VescProtocol.faultName(it) },
     )
 }
 
@@ -209,6 +234,7 @@ internal class RideIcons(
     val btOff: VectorPainter,
     val batteryAlert: VectorPainter,
     val thermo: VectorPainter,
+    val chip: VectorPainter,
 )
 
 @Composable
@@ -217,7 +243,21 @@ internal fun rememberRideIcons() = RideIcons(
     btOff = rememberVectorPainter(Icons.Filled.BluetoothDisabled),
     batteryAlert = rememberVectorPainter(Icons.Filled.BatteryAlert),
     thermo = rememberVectorPainter(Icons.Filled.Thermostat),
+    chip = rememberVectorPainter(Icons.Filled.Memory),
 )
+
+/** 0.35 ↔ 1 blink used by warnings that have hit their red point. */
+@Composable
+internal fun rememberWarningPulse(): Float {
+    val transition = rememberInfiniteTransition(label = "warningPulse")
+    val pulse by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(tween(450), RepeatMode.Reverse),
+        label = "pulse",
+    )
+    return pulse
+}
 
 internal fun pillBorderColor(status: ModeApplyStatus, c: RidePalette): Color = when (status) {
     is ModeApplyStatus.Failed -> c.red
@@ -323,43 +363,99 @@ internal fun DrawScope.drawIcon(p: VectorPainter, center: Offset, size: Float, c
     }
 }
 
-/** Vertical stack of warning icons starting at ([x], [y]), each [size] px. */
+/**
+ * Vertical stack of warning icons starting at ([x], [y]), each [size] px. Heat warnings show
+ * the part (chip = controller, motor outline = motor) with a thermometer badge and the
+ * temperature, coloured yellow → red; at their red point they blink with [pulse].
+ */
 internal fun DrawScope.drawWarningStack(
     m: TextMeasurer,
     icons: RideIcons,
     c: RidePalette,
-    warnings: List<Warning>,
-    faultText: String?,
+    warnings: List<RideWarning>,
     x: Float,
     y: Float,
     size: Float,
+    pulse: Float,
 ) {
     val stroke = size * 0.06f
     var cy = y
     for (w in warnings) {
         val center = Offset(x, cy)
         when (w) {
-            Warning.NO_LINK -> {
+            RideWarning.NoLink -> {
                 drawCircle(c.amber, size / 2f, center, style = Stroke(stroke))
                 drawIcon(icons.btOff, center, size * 0.58f, c.amber)
             }
-            Warning.BATTERY_LOW -> drawIcon(icons.batteryAlert, center, size, c.amber)
-            Warning.BATTERY_CRITICAL -> drawIcon(icons.batteryAlert, center, size, c.red)
-            Warning.TEMP_WARN -> drawIcon(icons.thermo, center, size, c.amber)
-            Warning.TEMP_DANGER -> drawIcon(icons.thermo, center, size, c.red)
-            Warning.FAULT -> {
+            is RideWarning.LowBattery -> drawIcon(icons.batteryAlert, center, size, if (w.critical) c.red else c.amber)
+            is RideWarning.ControllerHot -> drawHeatWarning(m, icons, c, center, size, w.tempC, CONTROLLER_RED_C, "CTRL", pulse) { color ->
+                drawIcon(icons.chip, center, size * 0.9f, color)
+            }
+            is RideWarning.MotorHot -> drawHeatWarning(m, icons, c, center, size, w.tempC, MOTOR_RED_C, "MOTOR", pulse) { color ->
+                drawMotorGlyph(center, size * 0.9f, color)
+            }
+            is RideWarning.Fault -> {
                 val r = size * 0.36f
                 drawCircle(c.red, r, center, style = Stroke(stroke))
                 drawLine(c.red, Offset(x - size / 2f, cy), Offset(x - r, cy), strokeWidth = stroke)
                 drawLine(c.red, Offset(x + r, cy), Offset(x + size / 2f, cy), strokeWidth = stroke)
                 drawCentered(m, AnnotatedString("M"), wide(r * 0.95f, c.red), center)
-                if (faultText != null) {
-                    drawCentered(m, AnnotatedString(faultText), wide(size * 0.26f, c.red), Offset(x + size * 0.7f, cy), alignX = 0f)
-                }
+                drawCentered(m, AnnotatedString(w.text), wide(size * 0.26f, c.red), Offset(x + size * 0.7f, cy), alignX = 0f)
             }
         }
         cy += size * 1.35f
     }
+}
+
+private fun DrawScope.drawHeatWarning(
+    m: TextMeasurer,
+    icons: RideIcons,
+    c: RidePalette,
+    center: Offset,
+    size: Float,
+    tempC: Double,
+    redAtC: Double,
+    label: String,
+    pulse: Float,
+    glyph: DrawScope.(Color) -> Unit,
+) {
+    val alpha = if (tempC >= redAtC) pulse else 1f
+    val color = heatColor(tempC, redAtC, c).copy(alpha = alpha)
+    glyph(color)
+    // Thermometer badge in the lower-right corner
+    val badge = size * 0.5f
+    val badgeCenter = Offset(center.x + size * 0.38f, center.y + size * 0.3f)
+    drawCircle(c.minimalBg.copy(alpha = 0.85f), badge * 0.45f, badgeCenter)
+    drawIcon(icons.thermo, badgeCenter, badge, color)
+    // Temperature and label to the right
+    val textX = center.x + size * 0.78f
+    // Michroma draws ° as a small "o", so the unit uses the system face.
+    val temp = buildAnnotatedString {
+        append(tempC.roundToInt().toString())
+        withStyle(SpanStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = (size * 0.28f).toSp())) { append("°C") }
+    }
+    drawCentered(m, temp, wide(size * 0.4f, color), Offset(textX, center.y - size * 0.1f), alignX = 0f)
+    drawCentered(m, AnnotatedString(label), wide(size * 0.16f, c.label.copy(alpha = alpha), 0.08f), Offset(textX, center.y + size * 0.3f), alignX = 0f)
+}
+
+/** Simple electric-motor pictogram: finned body, end cap and shaft. */
+private fun DrawScope.drawMotorGlyph(center: Offset, size: Float, color: Color) {
+    val stroke = size * 0.08f
+    val bodyW = size * 0.62f
+    val bodyH = size * 0.46f
+    val left = center.x - size * 0.4f
+    val top = center.y - bodyH / 2f + size * 0.04f
+    drawRoundRect(color, Offset(left, top), Size(bodyW, bodyH), CornerRadius(size * 0.06f), style = Stroke(stroke))
+    // cooling fins on top
+    for (i in 0..2) {
+        val fx = left + bodyW * (0.22f + 0.28f * i)
+        drawLine(color, Offset(fx, top), Offset(fx, top - size * 0.14f), strokeWidth = stroke)
+    }
+    // end cap and shaft
+    drawRect(color, Offset(left + bodyW, center.y - bodyH * 0.28f + size * 0.04f), Size(size * 0.1f, bodyH * 0.56f))
+    drawLine(color, Offset(left + bodyW + size * 0.1f, center.y + size * 0.04f), Offset(left + bodyW + size * 0.28f, center.y + size * 0.04f), strokeWidth = stroke)
+    // base/feet
+    drawLine(color, Offset(left + bodyW * 0.1f, top + bodyH + size * 0.1f), Offset(left + bodyW * 0.9f, top + bodyH + size * 0.1f), strokeWidth = stroke)
 }
 
 // ---- system bars ------------------------------------------------------------------

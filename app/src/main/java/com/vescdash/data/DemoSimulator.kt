@@ -47,7 +47,7 @@ class DemoSimulator {
         val noLoad = VehicleMath.noLoadSpeedKmh(v).coerceAtLeast(1.0)
         val duty = (speedKmh / noLoad).coerceIn(0.0, v.maxDuty)
 
-        val capacityWh = v.nominalVoltage * 15.0
+        val capacityWh = v.nominalVoltage * 30.0
         val soc = (startSoc - (whUsed - whRegen) / capacityWh).coerceIn(0.0, 1.0)
         val batteryCurrent = (motorCurrent * duty)
             .coerceIn(-v.batteryRegenMax * v.controllers, v.batteryCurrentMax * power * v.controllers)
@@ -64,8 +64,9 @@ class DemoSimulator {
         tacho += abs(erpm) / 60.0 * dt * 6.0 // 6 tacho counts per electrical revolution
 
         val load = abs(motorCurrent) / motorMax.coerceAtLeast(1.0)
-        tempFet += ((28.0 + 45.0 * load) - tempFet) * dt / 25.0
-        tempMotor += ((30.0 + 70.0 * load) - tempMotor) * dt / 40.0
+        // Hot enough under hard riding to show the heat warnings.
+        tempFet += ((30.0 + 65.0 * load) - tempFet) * dt / 20.0
+        tempMotor += ((32.0 + 90.0 * load) - tempMotor) * dt / 25.0
 
         return Telemetry(
             timeMs = System.currentTimeMillis(),

@@ -44,6 +44,7 @@ internal fun ClassicRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
     val batColor = batteryColor(d.battery, c)
     val measurer = rememberTextMeasurer()
     val icons = rememberRideIcons()
+    val pulse = rememberWarningPulse()
     val pillBorder = pillBorderColor(d.modeStatus, c)
     val boltColor = d.modeColor ?: c.textSoft
 
@@ -73,7 +74,7 @@ internal fun ClassicRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
                 Offset(g.cx, g.watermarkY),
             )
             // x clears a landscape camera cutout
-            drawWarningStack(measurer, icons, c, d.warnings, d.faultText, x = 0.1f * g.w, y = 0.52f * g.h, size = 0.1f * g.h)
+            drawWarningStack(measurer, icons, c, d.warnings, x = 0.1f * g.w, y = 0.52f * g.h, size = 0.1f * g.h, pulse = pulse)
         }
 
         TapTarget(g.pill, enabled = true, onClick = onCycleMode)

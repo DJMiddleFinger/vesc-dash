@@ -38,6 +38,7 @@ internal fun MinimalRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
     val torqueFrac by animateFloatAsState(d.torque, tween(120), label = "torque")
     val measurer = rememberTextMeasurer()
     val icons = rememberRideIcons()
+    val pulse = rememberWarningPulse()
     val batColor = batteryColor(d.battery, c)
 
     // Entry: top row drops in, speed scales up, bars sweep to full and settle.
@@ -155,7 +156,7 @@ internal fun MinimalRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
             drawCentered(measurer, AnnotatedString("REG"), labelStyle, Offset(x0 - 0.015f * w, y), alignX = 1f)
             drawCentered(measurer, AnnotatedString("MAX"), labelStyle, Offset(x1 + 0.015f * w, y), alignX = 0f)
 
-            drawWarningStack(measurer, icons, c, d.warnings, d.faultText, x = 0.09f * w, y = 0.38f * h, size = 0.09f * h)
+            drawWarningStack(measurer, icons, c, d.warnings, x = 0.075f * w, y = 0.36f * h, size = 0.12f * h, pulse = pulse)
         }
 
         TapTarget(pill, enabled = true, onClick = onCycleMode)
