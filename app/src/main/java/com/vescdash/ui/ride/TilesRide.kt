@@ -24,10 +24,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.withStyle
 import kotlinx.coroutines.delay
 import java.util.Date
 import java.util.Locale
@@ -125,11 +123,10 @@ internal fun TilesRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, onH
             val total = d.rideTimeMs / 60_000
             drawCentered(measurer, AnnotatedString(clock), style, Offset(margin + 0.01f * w, y), alignX = 0f)
             drawCentered(measurer, AnnotatedString("RIDE  ${total / 60}h ${(total % 60).toString().padStart(2, '0')}m"), style, Offset(w / 2f, y))
-            // Michroma draws ° as a small "o", so the unit uses the system face.
             val motor = buildAnnotatedString {
                 append("MOTOR  ")
                 append(d.motorTempC?.roundToInt()?.toString() ?: "--")
-                withStyle(SpanStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium)) { append(" °C") }
+                appendUnit(" °C", weight = FontWeight.Medium)
             }
             drawCentered(measurer, motor, style, Offset(w - margin - 0.01f * w, y), alignX = 1f)
 

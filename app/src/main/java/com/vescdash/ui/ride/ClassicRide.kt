@@ -23,10 +23,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.withStyle
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -194,25 +191,18 @@ private fun DrawScope.drawPowerMode(
 
 private fun DrawScope.drawBatteryValue(g: RideGeometry, m: TextMeasurer, battery: Double?, color: Color) {
     val text = buildAnnotatedString {
-        withStyle(SpanStyle(fontSize = (0.165f * g.h).toSp())) { append(battery?.roundToInt()?.toString() ?: "--") }
-        // Michroma's % glyph reads as "o/o", so use the system face for the sign.
-        withStyle(SpanStyle(fontSize = (0.06f * g.h).toSp(), fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold)) {
-            append(" %")
-        }
+        append(battery?.roundToInt()?.toString() ?: "--")
+        appendUnit(" %", (0.06f * g.h).toSp())
     }
     drawCentered(m, text, wide(0.165f * g.h, color), Offset(g.panelCenterX(1), g.valueY))
 }
 
 private fun DrawScope.drawRidingTime(g: RideGeometry, m: TextMeasurer, ms: Long) {
-    val totalMin = ms / 60_000
-    val big = SpanStyle(fontSize = (0.105f * g.h).toSp(), color = g.c.text)
-    val small = SpanStyle(fontSize = (0.05f * g.h).toSp(), color = g.c.textSoft)
-    val text = buildAnnotatedString {
-        withStyle(big) { append((totalMin / 60).toString()) }
-        withStyle(small) { append(" h ") }
-        withStyle(big) { append((totalMin % 60).toString().padStart(2, '0')) }
-        withStyle(small) { append(" m") }
-    }
+    val text = ridingTimeText(
+        ms,
+        big = SpanStyle(fontSize = (0.105f * g.h).toSp(), color = g.c.text),
+        small = SpanStyle(fontSize = (0.05f * g.h).toSp(), color = g.c.textSoft),
+    )
     drawCentered(m, text, wide(0.105f * g.h, g.c.text), Offset(g.panelCenterX(2), g.valueY))
 }
 

@@ -9,7 +9,7 @@ class TelemetryTest {
     private fun values(tempFet: Double, tempMotor: Double) = VescValues(
         tempFet = tempFet, tempMotor = tempMotor, currentMotor = 0.0, currentIn = 0.0, duty = 0.0,
         erpm = 0.0, voltage = 48.0, ampHours = 0.0, ampHoursCharged = 0.0, wattHours = 0.0,
-        wattHoursCharged = 0.0, tachometer = 0, tachometerAbs = 0, fault = 0, controllerId = 0,
+        wattHoursCharged = 0.0, tachometerAbs = 0, fault = 0, controllerId = 0,
     )
 
     @Test

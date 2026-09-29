@@ -11,10 +11,14 @@ object VescPacket {
     fun encode(payload: ByteArray): ByteArray {
         val len = payload.size
         val out = ByteArrayOutputStream(len + 8)
-        when {
-            len <= 0xFF -> { out.write(2); out.write(len) }
-            len <= 0xFFFF -> { out.write(3); out.write(len ushr 8); out.write(len) }
-            else -> { out.write(4); out.write(len ushr 16); out.write(len ushr 8); out.write(len) }
+        require(len <= 0xFFFF) { "VESC payloads are at most 64 KB" }
+        if (len <= 0xFF) {
+            out.write(2)
+            out.write(len)
+        } else {
+            out.write(3)
+            out.write(len ushr 8)
+            out.write(len)
         }
         out.write(payload, 0, len)
         val crc = Crc16.compute(payload)

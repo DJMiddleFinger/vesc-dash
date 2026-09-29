@@ -18,10 +18,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.withStyle
 import kotlin.math.roundToInt
 
 /**
@@ -79,8 +76,7 @@ internal fun MinimalRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
             // Battery: outlined cell with fill, then the percentage
             val pctText = buildAnnotatedString {
                 append(d.battery?.roundToInt()?.toString() ?: "--")
-                // Michroma's % glyph reads as "o/o", so use the system face for the sign.
-                withStyle(SpanStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = (0.05f * h).toSp())) { append(" %") }
+                appendUnit(" %", (0.05f * h).toSp())
             }
             val pctStyle = wide(0.075f * h, if (d.battery == null) c.label else c.text)
             val pctWidth = measurer.measure(pctText, pctStyle).size.width
@@ -104,15 +100,11 @@ internal fun MinimalRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
             drawCentered(measurer, pctText, pctStyle, Offset(left + bw + gap, topY), alignX = 0f)
 
             // Riding time
-            val totalMin = d.rideTimeMs / 60_000
-            val big = SpanStyle(fontSize = (0.075f * h).toSp(), color = c.text)
-            val small = SpanStyle(fontSize = (0.036f * h).toSp(), color = c.textSoft)
-            val time = buildAnnotatedString {
-                withStyle(big) { append((totalMin / 60).toString()) }
-                withStyle(small) { append(" h ") }
-                withStyle(big) { append((totalMin % 60).toString().padStart(2, '0')) }
-                withStyle(small) { append(" m") }
-            }
+            val time = ridingTimeText(
+                d.rideTimeMs,
+                big = SpanStyle(fontSize = (0.075f * h).toSp(), color = c.text),
+                small = SpanStyle(fontSize = (0.036f * h).toSp(), color = c.textSoft),
+            )
             drawCentered(measurer, time, wide(0.075f * h, c.text), Offset(0.965f * w, topY), alignX = 1f)
         }
 

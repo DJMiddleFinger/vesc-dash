@@ -64,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -202,7 +203,6 @@ internal fun heatColor(tempC: Double, startC: Double, redAtC: Double, c: RidePal
 internal class RideData(
     val speed: Double?,
     val speedUnit: String,
-    val powerKw: Double?,
     val trip: Double?,
     val tripUnit: String,
     val motorTempC: Double?,
@@ -246,7 +246,6 @@ internal fun collectRideData(vm: MainViewModel): RideData {
     return RideData(
         speed = t?.let { Metric.SPEED.value(it, vehicle) },
         speedUnit = if (vehicle.imperial) "mph" else "kmh",
-        powerKw = t?.let { Metric.POWER.value(it, vehicle) },
         trip = t?.let { Metric.TRIP.value(it, vehicle) },
         tripUnit = Metric.TRIP.unit(vehicle),
         motorTempC = t?.tempMotor,
@@ -422,6 +421,26 @@ internal fun DrawScope.drawPowerBar(
     drawCentered(m, AnnotatedString("MAX"), labelStyle, Offset(x1 + gap, y), alignX = 0f)
 }
 
+/** Michroma draws % and ° badly ("o/o", a small "o"), so units use the system face. */
+internal fun AnnotatedString.Builder.appendUnit(
+    text: String,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    weight: FontWeight = FontWeight.SemiBold,
+) {
+    withStyle(SpanStyle(fontFamily = FontFamily.Default, fontWeight = weight, fontSize = fontSize)) { append(text) }
+}
+
+/** Riding time as "0 h 17 m": digits in [big], units in [small]. */
+internal fun ridingTimeText(ms: Long, big: SpanStyle, small: SpanStyle): AnnotatedString {
+    val totalMin = ms / 60_000
+    return buildAnnotatedString {
+        withStyle(big) { append((totalMin / 60).toString()) }
+        withStyle(small) { append(" h ") }
+        withStyle(big) { append((totalMin % 60).toString().padStart(2, '0')) }
+        withStyle(small) { append(" m") }
+    }
+}
+
 internal fun DrawScope.drawIcon(p: VectorPainter, center: Offset, size: Float, color: Color) {
     translate(center.x - size / 2f, center.y - size / 2f) {
         with(p) { draw(Size(size, size), colorFilter = ColorFilter.tint(color)) }
@@ -506,10 +525,9 @@ private fun DrawScope.drawHeatWarning(
     drawIcon(icons.thermo, badgeCenter, badge, color)
     // Temperature and label to the right
     val textX = center.x + size * 0.78f
-    // Michroma draws ° as a small "o", so the unit uses the system face.
     val temp = buildAnnotatedString {
         append(tempC.roundToInt().toString())
-        withStyle(SpanStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = (size * 0.28f).toSp())) { append("°C") }
+        appendUnit("°C", (size * 0.28f).toSp())
     }
     drawCentered(m, temp, wide(size * 0.4f, color), Offset(textX, center.y - size * 0.1f), alignX = 0f)
     drawCentered(m, AnnotatedString(label), wide(size * 0.16f, c.label.copy(alpha = alpha), 0.08f), Offset(textX, center.y + size * 0.3f), alignX = 0f)

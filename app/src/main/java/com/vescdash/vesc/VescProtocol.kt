@@ -25,7 +25,6 @@ data class VescValues(
     val ampHoursCharged: Double,
     val wattHours: Double,
     val wattHoursCharged: Double,
-    val tachometer: Int,
     val tachometerAbs: Int,
     val fault: Int,
     val controllerId: Int,
@@ -105,7 +104,7 @@ object VescProtocol {
         val ahCharged = r.f32(1e4)
         val wh = r.f32(1e4)
         val whCharged = r.f32(1e4)
-        val tacho = r.i32()
+        r.i32() // tachometer (signed); only the absolute count is used
         val tachoAbs = r.i32()
         val fault = r.u8()
         var controllerId = -1
@@ -115,7 +114,7 @@ object VescProtocol {
         }
         VescValues(
             tempFet, tempMotor, currentMotor, currentIn, duty, erpm, voltage,
-            ah, ahCharged, wh, whCharged, tacho, tachoAbs, fault, controllerId,
+            ah, ahCharged, wh, whCharged, tachoAbs, fault, controllerId,
         )
     } catch (e: IndexOutOfBoundsException) {
         null

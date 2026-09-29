@@ -32,7 +32,6 @@ import kotlin.math.abs
 
 sealed interface ModeApplyStatus {
     data object Idle : ModeApplyStatus
-    data class Pending(val modeId: String) : ModeApplyStatus
     data class Applying(val modeId: String) : ModeApplyStatus
     data class Applied(val modeId: String) : ModeApplyStatus
     data class Failed(val modeId: String) : ModeApplyStatus
@@ -311,7 +310,7 @@ class VescRepository(
         scope.launch {
             store.setActiveMode(id)
             val mode = modes.value.firstOrNull { it.id == id } ?: return@launch
-            if (isConnected) applyMode(mode) else _modeStatus.value = ModeApplyStatus.Pending(id)
+            if (isConnected) applyMode(mode)
         }
     }
 
