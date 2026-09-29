@@ -1,0 +1,122 @@
+package com.vescdash.data
+
+import kotlinx.serialization.Serializable
+import java.util.UUID
+
+fun newId(): String = UUID.randomUUID().toString().substring(0, 8)
+
+/**
+ * Physical vehicle + the "base" limits from the VESC Tool motor config.
+ * Drive modes scale down from these base limits.
+ */
+@Serializable
+data class VehicleSettings(
+    val configured: Boolean = false,
+    val motorPoles: Int = 30,
+    val motorKv: Double = 30.0,
+    val gearRatio: Double = 1.0,
+    val wheelDiameterMm: Double = 254.0,
+    val cellsSeries: Int = 13,
+    val imperial: Boolean = false,
+    val motorCurrentMax: Double = 60.0,
+    val batteryCurrentMax: Double = 30.0,
+    val batteryRegenMax: Double = 10.0,
+    val maxErpm: Double = 60000.0,
+    val maxDuty: Double = 0.95,
+    val dualController: Boolean = false,
+    val canSlaveId: Int = 1,
+    val pollHz: Int = 10,
+    val keepScreenOn: Boolean = true,
+    val applyModeOnConnect: Boolean = true,
+) {
+    val controllers: Int get() = if (dualController) 2 else 1
+    val nominalVoltage: Double get() = cellsSeries * 3.7
+}
+
+@Serializable
+data class DriveMode(
+    val id: String = newId(),
+    val name: String,
+    val color: Long,
+    /** Scales motor current (torque) and battery current. 10–100. */
+    val powerPct: Int = 70,
+    /** Scales braking current and battery regen current. 10–100. */
+    val regenPct: Int = 50,
+    /** Null = no limit beyond the base max ERPM. Always stored in km/h. */
+    val topSpeedKmh: Double? = null,
+    /** Null = no power cap. */
+    val powerCapKw: Double? = null,
+)
+
+@Serializable
+enum class WidgetType(val label: String) {
+    NUMBER("Number"),
+    GAUGE("Gauge"),
+    BAR("Bar"),
+    GRAPH("Graph"),
+}
+
+@Serializable
+enum class WidgetSize { HALF, FULL }
+
+@Serializable
+data class DashWidget(
+    val id: String = newId(),
+    val type: WidgetType,
+    val metric: Metric,
+    val size: WidgetSize = WidgetSize.HALF,
+    val min: Double? = null,
+    val max: Double? = null,
+    val warn: Double? = null,
+    val danger: Double? = null,
+    val label: String? = null,
+)
+
+@Serializable
+data class Dashboard(
+    val id: String = newId(),
+    val name: String,
+    val widgets: List<DashWidget>,
+)
+
+object Defaults {
+    val modeColors = listOf(
+        0xFF30D158, 0xFF29B6F6, 0xFFFF9100, 0xFFFF1744,
+        0xFFB388FF, 0xFFFFEA00, 0xFFFF4081, 0xFFE0E0E0,
+    )
+
+    val modes = listOf(
+        DriveMode("eco", "Eco", 0xFF30D158, powerPct = 40, regenPct = 70, topSpeedKmh = 25.0),
+        DriveMode("trail", "Trail", 0xFF29B6F6, powerPct = 65, regenPct = 50),
+        DriveMode("sport", "Sport", 0xFFFF9100, powerPct = 85, regenPct = 35),
+        DriveMode("max", "Max", 0xFFFF1744, powerPct = 100, regenPct = 25),
+    )
+
+    val dashboards = listOf(
+        Dashboard(
+            "ride", "Ride",
+            listOf(
+                DashWidget("r-speed", WidgetType.GAUGE, Metric.SPEED, WidgetSize.FULL),
+                DashWidget("r-power", WidgetType.NUMBER, Metric.POWER),
+                DashWidget("r-batt", WidgetType.NUMBER, Metric.BATTERY, warn = 20.0, danger = 10.0),
+                DashWidget("r-tmot", WidgetType.BAR, Metric.TEMP_MOTOR, warn = 80.0, danger = 100.0),
+                DashWidget("r-tfet", WidgetType.BAR, Metric.TEMP_FET, warn = 70.0, danger = 85.0),
+                DashWidget("r-pgraph", WidgetType.GRAPH, Metric.POWER, WidgetSize.FULL),
+                DashWidget("r-trip", WidgetType.NUMBER, Metric.TRIP),
+                DashWidget("r-eff", WidgetType.NUMBER, Metric.EFFICIENCY),
+            ),
+        ),
+        Dashboard(
+            "tune", "Tuning",
+            listOf(
+                DashWidget("t-imot", WidgetType.GRAPH, Metric.MOTOR_CURRENT, WidgetSize.FULL),
+                DashWidget("t-ibat", WidgetType.GRAPH, Metric.BATTERY_CURRENT, WidgetSize.FULL),
+                DashWidget("t-duty", WidgetType.BAR, Metric.DUTY, WidgetSize.FULL, warn = 85.0, danger = 92.0),
+                DashWidget("t-volt", WidgetType.NUMBER, Metric.VOLTAGE),
+                DashWidget("t-rpm", WidgetType.NUMBER, Metric.MOTOR_RPM),
+                DashWidget("t-wh", WidgetType.NUMBER, Metric.WH_USED),
+                DashWidget("t-regen", WidgetType.NUMBER, Metric.WH_REGEN),
+            ),
+        ),
+    )
+}

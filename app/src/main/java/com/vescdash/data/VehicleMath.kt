@@ -1,0 +1,99 @@
+package com.vescdash.data
+
+import com.vescdash.vesc.TempLimits
+import kotlin.math.PI
+import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
+
+const val KMH_TO_MPH = 0.621371
+
+data class CurvePoint(val kmh: Double, val kw: Double)
+
+object VehicleMath {
+    private fun polePairs(v: VehicleSettings) = max(v.motorPoles, 2) / 2.0
+    private fun gear(v: VehicleSettings) = max(v.gearRatio, 1e-3)
+    private fun wheelM(v: VehicleSettings) = max(v.wheelDiameterMm, 1.0) / 1000.0
+
+    fun speedKmhForErpm(erpm: Double, v: VehicleSettings): Double =
+        erpm / polePairs(v) / gear(v) * PI * wheelM(v) / 60.0 * 3.6
+
+    fun erpmForSpeedKmh(kmh: Double, v: VehicleSettings): Double =
+        kmh / 3.6 * 60.0 / (PI * wheelM(v)) * gear(v) * polePairs(v)
+
+    /** Same scaling the firmware uses for distance: tacho / (3 * poles * gear) * wheel circumference. */
+    fun tripKm(t: Telemetry, v: VehicleSettings): Double =
+        t.tachoAbs / (3.0 * max(v.motorPoles, 2)) / gear(v) * PI * wheelM(v) / 1000.0
+
+    /** Unloaded speed at 100% duty from motor KV and nominal pack voltage. */
+    fun noLoadSpeedKmh(v: VehicleSettings): Double =
+        speedKmhForErpm(v.motorKv * v.nominalVoltage * polePairs(v), v)
+
+    /** Highest reachable speed: the smaller of the ERPM limit and the duty-cycle limit. */
+    fun maxSpeedKmh(v: VehicleSettings): Double =
+        min(speedKmhForErpm(v.maxErpm, v), noLoadSpeedKmh(v) * v.maxDuty)
+
+    /**
+     * Estimated electrical power vs speed. Below base speed the motor-current limit
+     * dominates (P ≈ I_motor × V_bat × duty); above it the battery-current limit or the
+     * mode's power cap flattens the curve; it ends at the top-speed / ERPM limit.
+     */
+    fun powerCurve(mode: DriveMode?, v: VehicleSettings, samples: Int = 48): List<CurvePoint> {
+        val p = (mode?.powerPct ?: 100) / 100.0
+        val vNom = v.nominalVoltage
+        val noLoad = noLoadSpeedKmh(v)
+        val end = min(mode?.topSpeedKmh ?: Double.MAX_VALUE, maxSpeedKmh(v)).coerceAtLeast(0.1)
+        val batteryW = v.batteryCurrentMax * p * vNom * v.controllers
+        val capW = mode?.powerCapKw?.let { it * 1000.0 } ?: Double.MAX_VALUE
+        val points = (0..samples).map { i ->
+            val s = end * i / samples
+            val duty = if (noLoad > 0) s / noLoad else 0.0
+            val motorW = v.motorCurrentMax * p * vNom * duty * v.controllers
+            CurvePoint(s, minOf(motorW, batteryW, capW) / 1000.0)
+        }
+        return points + CurvePoint(end, 0.0)
+    }
+
+    fun peakKw(mode: DriveMode?, v: VehicleSettings): Double = powerCurve(mode, v).maxOf { it.kw }
+
+    /** Translate a drive mode into the COMM_SET_MCCONF_TEMP limits. */
+    fun limitsFor(mode: DriveMode, v: VehicleSettings): TempLimits {
+        val power = (mode.powerPct / 100.0).coerceIn(0.05, 1.0)
+        val regen = (mode.regenPct / 100.0).coerceIn(0.05, 1.0)
+        val erpm = mode.topSpeedKmh?.let { min(erpmForSpeedKmh(it, v), v.maxErpm) } ?: v.maxErpm
+        return TempLimits(
+            currentMinScale = regen,
+            currentMaxScale = power,
+            erpmMin = -erpm,
+            erpmMax = erpm,
+            dutyMin = 0.005,
+            dutyMax = v.maxDuty,
+            wattMin = -1_500_000.0,
+            wattMax = mode.powerCapKw?.let { it * 1000.0 } ?: 1_500_000.0,
+            batteryCurrentMin = -v.batteryRegenMax * regen,
+            batteryCurrentMax = v.batteryCurrentMax * power,
+        )
+    }
+
+    fun kwToHp(kw: Double) = kw * 1.34102
+}
+
+/** Round up to a "nice" chart bound: 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10 × 10^n. */
+fun niceCeil(x: Double): Double {
+    if (x <= 0 || x.isNaN() || x.isInfinite()) return 1.0
+    val mag = 10.0.pow(floor(log10(x)))
+    val n = x / mag
+    val step = listOf(1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0).first { n <= it + 1e-9 }
+    return step * mag
+}
+
+/** Gridline step: 1, 2, 2.5 or 5 × 10^n. */
+fun niceStep(x: Double): Double {
+    if (x <= 0 || x.isNaN() || x.isInfinite()) return 1.0
+    val mag = 10.0.pow(floor(log10(x)))
+    val n = x / mag
+    val step = listOf(1.0, 2.0, 2.5, 5.0, 10.0).first { n <= it + 1e-9 }
+    return step * mag
+}
