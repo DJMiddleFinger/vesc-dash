@@ -11,7 +11,7 @@ An Android app that connects to a VESC motor controller over Bluetooth and gives
 ## Build & install
 
 1. Install [Android Studio](https://developer.android.com/studio). It includes the JDK and Android SDK.
-2. **File → Open…** and pick this `vesc-dash` folder. Let Gradle sync finish. It downloads Gradle 8.11 and the dependencies the first time.
+2. **File → Open…** and pick this `vesc-dash` folder. Let Gradle sync finish. It downloads Gradle and the dependencies the first time.
 3. On your phone, turn on **Developer options → USB debugging**, then plug it in.
 4. Press **Run ▶**. Android Studio builds the app and installs it on the phone.
 
@@ -55,7 +55,7 @@ app/src/main/java/com/vescdash/
   ui/     Compose screens: dash/, modes/ (tuner + power curve), setup/, connect/
 ```
 
-Run the protocol unit tests with **Gradle → app → Tasks → verification → test**, or with `./gradlew test` once Android Studio has generated the wrapper.
+Run the protocol unit tests with **Gradle → app → Tasks → verification → test**, or with `./gradlew test` from the project folder.
 
 ## Credits
 
