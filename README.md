@@ -65,6 +65,22 @@ Run the protocol unit tests with **Gradle → app → Tasks → verification →
 
 The ride view uses the [Michroma](https://github.com/googlefonts/Michroma-font) typeface, licensed under the SIL Open Font License 1.1 (see `licenses/Michroma-OFL.txt`). The ride view is inspired by the Stark Varg's dashboard; this project is not affiliated with Stark Future.
 
+## Regen when you let off the throttle
+
+A mode's **Regen %** scales how hard the VESC brakes, but the VESC only brakes when its input asks it to. With a single thumb/twist throttle on the ADC input, releasing the throttle normally means "0 A": the motor coasts and no regen happens. To get engine-braking on throttle release, set this up in VESC Tool:
+
+1. **App Settings → General → App to Use:** `ADC`.
+2. **App Settings → ADC → General → Control Type:** `Current No Reverse Brake Center`.
+3. **App Settings → ADC → Mapping** (watch the live ADC1 voltage):
+   - **Min Voltage:** the reading with the throttle released.
+   - **Max Voltage:** the reading at full throttle.
+   - **Center Voltage:** slightly above the released reading, about 5–10 % of the travel. Below this is regen, above it is power.
+4. **App Settings → ADC → General → Ramp time neg:** about `0.3 s`, so regen eases in.
+5. **Motor Settings → General → Current → Motor Current Min (Regen):** this is 100 % regen; each mode's Regen % scales down from it. Make `Battery Current Min (Regen)` match **Battery regen max** in the app.
+6. Write the config and test with the wheel off the ground first.
+
+With the throttle fully released you get full regen at the mode's Regen %. It fades out as you open the throttle toward the center point, then power takes over. Regen naturally fades as speed drops, and this control type can't drive the motor backwards.
+
 ## Safety
 
 - Test new modes at low speed first.
