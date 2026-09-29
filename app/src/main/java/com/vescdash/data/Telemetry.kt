@@ -19,6 +19,8 @@ data class Telemetry(
     val tachoAbs: Long,
     val fault: Int,
     val controllers: Int,
+    /** Stabilized state of charge filled in by the repository; NaN = use raw voltage. */
+    val batteryPct: Double = Double.NaN,
 ) {
     companion object {
         fun from(local: VescValues, remote: VescValues?, timeMs: Long): Telemetry {

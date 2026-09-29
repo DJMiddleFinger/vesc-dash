@@ -1,6 +1,10 @@
 package com.vescdash.ui.dash
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -108,6 +112,7 @@ fun widgetHeight(w: DashWidget) = when (w.type) {
 @Composable
 fun WidgetCard(
     widget: DashWidget,
+    modifier: Modifier = Modifier,
     telemetry: Telemetry?,
     history: List<Telemetry>,
     historyCapacity: Int,
@@ -125,7 +130,7 @@ fun WidgetCard(
     val value = telemetry?.let { widget.metric.value(it, vehicle) }
 
     Box(
-        Modifier
+        modifier
             .fillMaxWidth()
             .height(widgetHeight(widget))
             .clip(shape)
@@ -138,8 +143,13 @@ fun WidgetCard(
             WidgetType.BAR -> BarWidget(r, widget.metric, value, accent)
             WidgetType.GRAPH -> GraphWidget(widget, r, value, history, historyCapacity, vehicle, accent)
         }
-        if (editing) {
-            Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.6f))) {
+        AnimatedVisibility(
+            visible = editing,
+            modifier = Modifier.matchParentSize(),
+            enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.96f),
+            exit = fadeOut(tween(150)),
+        ) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f))) {
                 Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     EditButton(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Move back", onMoveBack)
                     EditButton(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Move forward", onMoveForward)

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +22,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vescdash.ble.VescBleTransport
 import com.vescdash.data.KMH_TO_MPH
+import com.vescdash.data.RideStyle
+import com.vescdash.data.RideTheme
 import com.vescdash.data.VehicleMath
 import com.vescdash.data.speedUnit
 import com.vescdash.ui.MainViewModel
@@ -77,6 +80,46 @@ fun SetupScreen(vm: MainViewModel) {
                 color = Palette.TextDim,
                 fontSize = 12.sp,
             )
+        }
+
+        Card(title = "RIDE VIEW  ·  LANDSCAPE") {
+            Text("Turn the phone sideways to show it.", color = Palette.TextDim, fontSize = 12.sp)
+            Text("Style", color = Palette.Fg, fontSize = 15.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RideStyle.entries.forEach { style ->
+                    FilterChip(
+                        selected = v.rideStyle == style,
+                        onClick = { vm.updateVehicle { it.copy(rideStyle = style) } },
+                        label = { Text(style.label) },
+                    )
+                }
+            }
+            Text("Theme", color = Palette.Fg, fontSize = 15.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RideTheme.entries.forEach { theme ->
+                    FilterChip(
+                        selected = v.rideTheme == theme,
+                        onClick = { vm.updateVehicle { it.copy(rideTheme = theme) } },
+                        label = { Text(theme.label) },
+                    )
+                }
+            }
+            Text("Light is easier to read in direct sun. Auto follows the phone's dark mode.", color = Palette.TextDim, fontSize = 12.sp)
+        }
+
+        Card(title = "BATTERY") {
+            SettingSwitch(
+                "Stabilize battery %",
+                v.batteryStabilize,
+                "Compensates for voltage sag so the reading doesn't drop when you accelerate",
+            ) { on -> vm.updateVehicle { it.copy(batteryStabilize = on) } }
+            SettingNumber(
+                "Pack capacity",
+                v.batteryCapacityAh,
+                0.0..500.0,
+                suffix = "Ah",
+                help = "Optional. With capacity set, charge used is counted directly for the steadiest reading. 0 = unknown.",
+            ) { x -> vm.updateVehicle { it.copy(batteryCapacityAh = x) } }
         }
 
         Card(title = "BASE LIMITS  ·  FROM VESC TOOL") {

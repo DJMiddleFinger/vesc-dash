@@ -1,5 +1,7 @@
 package com.vescdash.ui.dash
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,6 +68,7 @@ import com.vescdash.ui.common.Banner
 import com.vescdash.ui.theme.Palette
 import com.vescdash.vesc.VescProtocol
 import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
 
 private data class EditorTarget(val dashboardId: String, val widget: DashWidget?)
 
@@ -110,13 +114,14 @@ fun DashboardScreen(vm: MainViewModel, onConnectClick: () -> Unit) {
             Row(Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
                 dashboards.forEachIndexed { i, d ->
                     val selected = pager.currentPage == i
+                    val tabColor by animateColorAsState(if (selected) Palette.Fg else Palette.TextDim, tween(250), label = "pageTab")
                     Text(
                         d.name.uppercase(),
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { scope.launch { pager.animateScrollToPage(i) } }
                             .padding(horizontal = 10.dp, vertical = 10.dp),
-                        color = if (selected) Palette.Fg else Palette.TextDim,
+                        color = tabColor,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                         fontSize = 13.sp,
                         letterSpacing = 1.2.sp,
@@ -138,7 +143,16 @@ fun DashboardScreen(vm: MainViewModel, onConnectClick: () -> Unit) {
             key = { dashboards.getOrNull(it)?.id ?: it },
         ) { page ->
             val dash = dashboards.getOrNull(page) ?: return@HorizontalPager
+            // Neighbouring pages shrink and fade slightly as you swipe between them.
+            val pageModifier = Modifier.graphicsLayer {
+                val offset = ((pager.currentPage - page) + pager.currentPageOffsetFraction).absoluteValue.coerceIn(0f, 1f)
+                val scale = 1f - 0.08f * offset
+                scaleX = scale
+                scaleY = scale
+                alpha = 1f - 0.5f * offset
+            }
             DashboardPage(
+                modifier = pageModifier,
                 dash = dash,
                 telemetry = telemetry,
                 history = history,
@@ -185,6 +199,7 @@ fun DashboardScreen(vm: MainViewModel, onConnectClick: () -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DashboardPage(
+    modifier: Modifier,
     dash: Dashboard,
     telemetry: Telemetry?,
     history: List<Telemetry>,
@@ -203,7 +218,7 @@ private fun DashboardPage(
     val capacity = 30 * vehicle.pollHz.coerceIn(1, 30)
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -214,6 +229,7 @@ private fun DashboardPage(
             span = { GridItemSpan(if (it.size == WidgetSize.FULL) maxLineSpan else 1) },
         ) { w ->
             WidgetCard(
+                modifier = Modifier.animateItem(),
                 widget = w,
                 telemetry = telemetry,
                 history = history,
@@ -275,25 +291,29 @@ fun ModeStrip(
                 val selected = m.id == activeId
                 val c = Color(m.color)
                 val shape = RoundedCornerShape(14.dp)
+                val bg by animateColorAsState(if (selected) c else Palette.Surface, tween(280), label = "modeBg")
+                val border by animateColorAsState(if (selected) c else Palette.Outline, tween(280), label = "modeBorder")
+                val numberColor by animateColorAsState(if (selected) Color.Black else c, tween(280), label = "modeNum")
+                val nameColor by animateColorAsState(if (selected) Color.Black else Palette.Fg, tween(280), label = "modeName")
                 Column(
                     Modifier
                         .widthIn(min = 78.dp)
                         .clip(shape)
-                        .background(if (selected) c else Palette.Surface)
-                        .border(1.dp, if (selected) c else Palette.Outline, shape)
+                        .background(bg)
+                        .border(1.dp, border, shape)
                         .clickable { onSelect(m.id) }
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
                         "${i + 1}",
-                        color = if (selected) Color.Black else c,
+                        color = numberColor,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Black,
                     )
                     Text(
                         m.name.uppercase(),
-                        color = if (selected) Color.Black else Palette.Fg,
+                        color = nameColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,

@@ -29,9 +29,28 @@ data class VehicleSettings(
     val keepScreenOn: Boolean = true,
     val applyModeOnConnect: Boolean = true,
     val demoMode: Boolean = false,
+    val rideStyle: RideStyle = RideStyle.CLASSIC,
+    val rideTheme: RideTheme = RideTheme.DARK,
+    /** Compensate voltage sag so battery % doesn't jump around under load. */
+    val batteryStabilize: Boolean = true,
+    /** Pack capacity in Ah; 0 = unknown. When set, battery % uses charge counting. */
+    val batteryCapacityAh: Double = 0.0,
 ) {
     val controllers: Int get() = if (dualController) 2 else 1
     val nominalVoltage: Double get() = cellsSeries * 3.7
+}
+
+@Serializable
+enum class RideStyle(val label: String) {
+    CLASSIC("Classic gauge"),
+    MINIMAL("Minimal"),
+}
+
+@Serializable
+enum class RideTheme(val label: String) {
+    DARK("Dark"),
+    LIGHT("Light"),
+    SYSTEM("Auto"),
 }
 
 @Serializable

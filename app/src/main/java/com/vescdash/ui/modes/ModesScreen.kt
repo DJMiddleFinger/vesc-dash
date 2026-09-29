@@ -1,6 +1,15 @@
 package com.vescdash.ui.modes
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,24 +70,60 @@ fun ModesScreen(vm: MainViewModel) {
     val effectiveActive = modes.firstOrNull { it.id == activeId }?.id ?: modes.firstOrNull()?.id
     val tuning = tuningId?.let { id -> modes.firstOrNull { it.id == id } }
 
-    if (tuning != null) {
-        BackHandler { tuningId = null }
-        TunerScreen(
-            mode = tuning,
-            index = modes.indexOf(tuning),
-            vehicle = vehicle,
-            isActive = tuning.id == effectiveActive,
-            canDelete = modes.size > 1,
-            onBack = { tuningId = null },
-            onSave = { m, activate -> vm.saveMode(m, activate) },
-            onDelete = {
-                vm.deleteMode(tuning.id)
-                tuningId = null
-            },
-        )
-        return
-    }
+    BackHandler(enabled = tuning != null) { tuningId = null }
 
+    // The tuner slides in from the right and back out again.
+    AnimatedContent(
+        targetState = tuning?.id,
+        transitionSpec = {
+            val spec = tween<IntOffset>(350, easing = FastOutSlowInEasing)
+            if (targetState != null) {
+                (slideInHorizontally(spec) { it } + fadeIn(tween(250))) togetherWith
+                    (slideOutHorizontally(spec) { -it / 4 } + fadeOut(tween(200)))
+            } else {
+                (slideInHorizontally(spec) { -it / 4 } + fadeIn(tween(250))) togetherWith
+                    (slideOutHorizontally(spec) { it } + fadeOut(tween(200)))
+            }
+        },
+        label = "tuner",
+    ) { id ->
+        val mode = id?.let { tid -> modes.firstOrNull { it.id == tid } }
+        if (mode != null) {
+            TunerScreen(
+                mode = mode,
+                index = modes.indexOf(mode),
+                vehicle = vehicle,
+                isActive = mode.id == effectiveActive,
+                canDelete = modes.size > 1,
+                onBack = { tuningId = null },
+                onSave = { m, activate -> vm.saveMode(m, activate) },
+                onDelete = {
+                    vm.deleteMode(mode.id)
+                    tuningId = null
+                },
+            )
+        } else {
+            ModeList(
+                modes = modes,
+                vehicle = vehicle,
+                activeId = effectiveActive,
+                onSelect = vm::selectMode,
+                onTune = { tuningId = it },
+                onAdd = { tuningId = vm.addMode() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModeList(
+    modes: List<DriveMode>,
+    vehicle: VehicleSettings,
+    activeId: String?,
+    onSelect: (String) -> Unit,
+    onTune: (String) -> Unit,
+    onAdd: () -> Unit,
+) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -95,14 +141,15 @@ fun ModesScreen(vm: MainViewModel) {
                 index = i,
                 mode = m,
                 vehicle = vehicle,
-                active = m.id == effectiveActive,
-                onSelect = { vm.selectMode(m.id) },
-                onTune = { tuningId = m.id },
+                active = m.id == activeId,
+                onSelect = { onSelect(m.id) },
+                onTune = { onTune(m.id) },
+                modifier = Modifier.animateItem(),
             )
         }
         if (modes.size < MAX_MODES) {
             item {
-                OutlinedButton(onClick = { tuningId = vm.addMode() }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Add, contentDescription = null)
                     Text(" Add mode")
                 }
@@ -120,16 +167,19 @@ private fun ModeCard(
     active: Boolean,
     onSelect: () -> Unit,
     onTune: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val c = Color(mode.color)
     val shape = RoundedCornerShape(20.dp)
+    val bg by animateColorAsState(if (active) c.copy(alpha = 0.10f) else Palette.Surface, tween(300), label = "cardBg")
+    val borderColor by animateColorAsState(if (active) c else Palette.Outline, tween(300), label = "cardBorder")
     val kw = remember(mode, vehicle) { VehicleMath.peakKw(mode, vehicle) }
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (active) c.copy(alpha = 0.10f) else Palette.Surface)
-            .border(if (active) 2.dp else 1.dp, if (active) c else Palette.Outline, shape)
+            .background(bg)
+            .border(if (active) 2.dp else 1.dp, borderColor, shape)
             .clickable(onClick = onSelect)
             .padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,

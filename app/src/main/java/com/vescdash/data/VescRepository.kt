@@ -85,6 +85,7 @@ class VescRepository(
     val rideTimeMs: StateFlow<Long> = _rideTimeMs.asStateFlow()
 
     private val historyBuf = ArrayDeque<Telemetry>()
+    private val batteryEstimator = BatteryEstimator()
     private var demoJob: Job? = null
 
     private val decoder = PacketDecoder()
@@ -215,8 +216,17 @@ class VescRepository(
         _stale.value = false
     }
 
-    private fun publish(t: Telemetry) {
+    private fun publish(raw: Telemetry) {
         val v = vehicle.value
+        val pct = if (v.batteryStabilize) {
+            batteryEstimator.update(
+                raw.voltage, raw.batteryCurrent, raw.ahUsed - raw.ahCharged, raw.timeMs,
+                v.cellsSeries, v.batteryCapacityAh,
+            )
+        } else {
+            Battery.percent(raw.voltage / v.cellsSeries.coerceAtLeast(1))
+        }
+        val t = raw.copy(batteryPct = pct)
         val prev = _telemetry.value
         if (prev != null && abs(VehicleMath.speedKmhForErpm(t.erpm, v)) > 1.5) {
             _rideTimeMs.value += (t.timeMs - prev.timeMs).coerceIn(0L, 2_000L)
@@ -231,6 +241,7 @@ class VescRepository(
     }
 
     private fun clearHistory() = synchronized(historyBuf) {
+        batteryEstimator.reset()
         historyBuf.clear()
         _history.value = emptyList()
     }

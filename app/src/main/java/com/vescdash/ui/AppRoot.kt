@@ -1,6 +1,16 @@
 package com.vescdash.ui
 
 import android.content.res.Configuration
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -112,83 +122,109 @@ fun AppRoot(vm: MainViewModel) {
         else -> Palette.TextDim to "Connect"
     }
 
-    if (landscape && !homeInLandscape) {
-        VescDashTheme(accent) { RideScreen(vm, onHome = { homeInLandscape = true }) }
-        return
-    }
+    val showRide = landscape && !homeInLandscape
 
     VescDashTheme(accent) {
-        Scaffold(
-            containerColor = Palette.Bg,
-            topBar = {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("VESC", color = accent, fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 2.sp)
-                    Text(" DASH", color = Palette.Fg, fontWeight = FontWeight.Light, fontSize = 18.sp, letterSpacing = 2.sp)
-                    Spacer(Modifier.weight(1f))
-                    if (landscape) {
-                        Text(
-                            "RIDE VIEW",
-                            modifier = Modifier
-                                .padding(end = 10.dp)
-                                .clip(CircleShape)
-                                .background(accent)
-                                .clickable { homeInLandscape = false }
-                                .padding(horizontal = 14.dp, vertical = 7.dp),
-                            color = Color.Black,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                        )
-                    }
-                    Row(
-                        Modifier
-                            .clip(CircleShape)
-                            .background(Palette.Surface2)
-                            .clickable { showConnect = true }
-                            .padding(horizontal = 12.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
-                        Spacer(Modifier.width(8.dp))
-                        Text(statusText, color = Palette.Fg, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.width(6.dp))
-                        Icon(Icons.Filled.Bluetooth, contentDescription = null, tint = Palette.TextDim, modifier = Modifier.size(16.dp))
-                    }
+        // Entering the ride view zooms in from slightly larger; leaving shrinks it back out.
+        AnimatedContent(
+            targetState = showRide,
+            modifier = Modifier.fillMaxSize().background(Palette.Bg),
+            transitionSpec = {
+                if (targetState) {
+                    (fadeIn(tween(450, delayMillis = 60)) + scaleIn(tween(600, easing = FastOutSlowInEasing), initialScale = 1.12f)) togetherWith
+                        (fadeOut(tween(250)) + scaleOut(tween(300), targetScale = 0.94f))
+                } else {
+                    (fadeIn(tween(350, delayMillis = 80)) + scaleIn(tween(400, easing = FastOutSlowInEasing), initialScale = 0.94f)) togetherWith
+                        (fadeOut(tween(250)) + scaleOut(tween(300), targetScale = 1.1f))
                 }
             },
-            bottomBar = {
-                NavigationBar(containerColor = Palette.Surface) {
-                    tabs.forEachIndexed { i, t ->
-                        NavigationBarItem(
-                            selected = tab == i,
-                            onClick = { tab = i },
-                            icon = { Icon(t.icon, contentDescription = t.label) },
-                            label = { Text(t.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color.Black,
-                                indicatorColor = accent,
-                                unselectedIconColor = Palette.TextDim,
-                                unselectedTextColor = Palette.TextDim,
-                                selectedTextColor = Palette.Fg,
-                            ),
-                        )
+            label = "rideView",
+        ) { ride ->
+            if (ride) {
+                RideScreen(vm, onHome = { homeInLandscape = true })
+            } else {
+                Scaffold(
+                    containerColor = Palette.Bg,
+                    topBar = {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("VESC", color = accent, fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 2.sp)
+                            Text(" DASH", color = Palette.Fg, fontWeight = FontWeight.Light, fontSize = 18.sp, letterSpacing = 2.sp)
+                            Spacer(Modifier.weight(1f))
+                            if (landscape) {
+                                Text(
+                                    "RIDE VIEW",
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
+                                        .clip(CircleShape)
+                                        .background(accent)
+                                        .clickable { homeInLandscape = false }
+                                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                                    color = Color.Black,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Black,
+                                )
+                            }
+                            Row(
+                                Modifier
+                                    .clip(CircleShape)
+                                    .background(Palette.Surface2)
+                                    .clickable { showConnect = true }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
+                                Spacer(Modifier.width(8.dp))
+                                Text(statusText, color = Palette.Fg, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Spacer(Modifier.width(6.dp))
+                                Icon(Icons.Filled.Bluetooth, contentDescription = null, tint = Palette.TextDim, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    bottomBar = {
+                        NavigationBar(containerColor = Palette.Surface) {
+                            tabs.forEachIndexed { i, t ->
+                                NavigationBarItem(
+                                    selected = tab == i,
+                                    onClick = { tab = i },
+                                    icon = { Icon(t.icon, contentDescription = t.label) },
+                                    label = { Text(t.label) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color.Black,
+                                        indicatorColor = accent,
+                                        unselectedIconColor = Palette.TextDim,
+                                        unselectedTextColor = Palette.TextDim,
+                                        selectedTextColor = Palette.Fg,
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                ) { padding ->
+                    AnimatedContent(
+                        targetState = tab,
+                        modifier = Modifier.fillMaxSize().padding(padding),
+                        transitionSpec = {
+                            val dir = if (targetState > initialState) 1 else -1
+                            (slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { w -> dir * w / 5 } + fadeIn(tween(260))) togetherWith
+                                (slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { w -> -dir * w / 5 } + fadeOut(tween(180)))
+                        },
+                        label = "tabs",
+                    ) { t ->
+                        when (t) {
+                            0 -> DashboardScreen(vm, onConnectClick = { showConnect = true })
+                            1 -> ModesScreen(vm)
+                            else -> SetupScreen(vm)
+                        }
                     }
-                }
-            },
-        ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                when (tab) {
-                    0 -> DashboardScreen(vm, onConnectClick = { showConnect = true })
-                    1 -> ModesScreen(vm)
-                    else -> SetupScreen(vm)
                 }
             }
         }
-        if (showConnect) ConnectSheet(vm, onDismiss = { showConnect = false })
+        if (showConnect && !showRide) ConnectSheet(vm, onDismiss = { showConnect = false })
     }
 }

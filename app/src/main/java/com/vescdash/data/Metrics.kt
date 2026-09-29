@@ -45,7 +45,7 @@ fun Metric.unit(v: VehicleSettings): String = when (this) {
 fun Metric.value(t: Telemetry, v: VehicleSettings): Double = when (this) {
     Metric.SPEED -> abs(VehicleMath.speedKmhForErpm(t.erpm, v)) * distFactor(v)
     Metric.POWER -> t.voltage * t.batteryCurrent / 1000.0
-    Metric.BATTERY -> Battery.percent(t.voltage / v.cellsSeries.coerceAtLeast(1))
+    Metric.BATTERY -> if (!t.batteryPct.isNaN()) t.batteryPct else Battery.percent(t.voltage / v.cellsSeries.coerceAtLeast(1))
     Metric.VOLTAGE -> t.voltage
     Metric.BATTERY_CURRENT -> t.batteryCurrent
     Metric.MOTOR_CURRENT -> t.motorCurrent

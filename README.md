@@ -5,6 +5,8 @@ An Android app that connects to a VESC motor controller over Bluetooth and gives
 - **A customizable live dashboard.** You get several swipeable pages of widgets (number, gauge, bar, live graph). Each widget can show any metric, with its own size, scale and warning/danger colors.
 - **Drive modes you can switch between.** Up to 6 modes, one tap to switch from the dashboard, in a Stark Varg-style mode strip.
 - **A full-screen ride view in landscape** laid out like the Stark Varg ride screen. It shows power mode, battery level and riding time across the top, a segmented battery arc, a torque/regen bar and big speed digits. Tap the ⚡ pill to change modes. When you're stopped, a home button takes you back to the app, and the ride view returns once you're moving above 5 km/h.
+- **Two ride styles, light or dark.** Choose between the Classic arc gauge and a Minimal layout (mode, battery and riding time along the top, a huge speed readout, and one power/regen bar), each in Dark, Light or Auto (Setup → Ride view). Entering the ride view zooms in and runs a key-on sweep of the gauges.
+- **Stable battery %.** The app learns the pack's internal resistance and adds back the voltage sag, so the reading doesn't drop when you accelerate. If you enter the pack capacity (Setup → Battery), it also counts the amp-hours used, which gives the steadiest reading.
 - **Demo mode** (Setup → Controller) plays simulated ride data so you can try the UI without a VESC.
 - **A basic power tuner for each mode.** Sliders set power %, regen braking %, top speed limit and power cap. It shows an estimated peak kW/hp and a power-vs-speed curve compared against 100%.
 
