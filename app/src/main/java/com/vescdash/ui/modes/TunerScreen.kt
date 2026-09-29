@@ -171,7 +171,7 @@ fun TunerScreen(
             TuneSlider(
                 title = "REGEN BRAKING",
                 valueText = "${draft.regenPct}%",
-                help = "Electric brake strength. For regen when you let off the throttle, set the VESC's ADC control type to \"Current No Reverse Brake Center\" (see README).",
+                help = "Electric brake strength (brake lever and coast regen). For regen when you let off the throttle, see \"Regen when you let off the throttle\" in the README.",
                 value = draft.regenPct.toFloat(),
                 range = 10f..100f,
                 steps = 17,

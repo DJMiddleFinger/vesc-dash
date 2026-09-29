@@ -67,7 +67,26 @@ The ride view uses the [Michroma](https://github.com/googlefonts/Michroma-font) 
 
 ## Regen when you let off the throttle
 
-A mode's **Regen %** scales how hard the VESC brakes, but the VESC only brakes when its input asks it to. With a single thumb/twist throttle on the ADC input, releasing the throttle normally means "0 A": the motor coasts and no regen happens. To get engine-braking on throttle release, set this up in VESC Tool:
+A mode's **Regen %** scales how hard the VESC brakes, but the VESC only brakes when its input asks it to. With a thumb/twist throttle on the ADC input, releasing the throttle normally means "0 A": the motor coasts and no regen happens. Pick the setup that matches your wiring.
+
+### With a regen brake lever on ADC2 (control type "Current No Reverse Brake ADC2")
+
+Use the LispBM script in [`vesc-scripts/coast-regen.lisp`](vesc-scripts/coast-regen.lisp). It runs on the VESC itself:
+
+- **Throttle released, lever not pulled, faster than 1 mph:** regen at `coast-level` of your brake current, eased in over `ramp-time`. The active mode's Regen % scales it, the same as it scales the lever.
+- **Touch the throttle, pull the lever, or drop below 1 mph:** control goes straight back to the normal ADC app, so the lever works exactly as before.
+- **Fail-safe:** the script pauses the ADC app only 100 ms at a time. If it ever stops, throttle and lever control return within 0.1 s.
+
+To install it:
+
+1. In VESC Tool, make sure the wheel diameter, motor poles and gear ratio are set (the setup wizard does this). The 1 mph check uses them.
+2. Open **VESC Dev Tools → LispBM**, paste the script and press **Upload**. It starts automatically on every power-up.
+3. Adjust `coast-level` (0.0–1.0) and `min-speed` at the top of the script to taste, then upload again.
+4. Test with the wheel off the ground: coast regen should kick in on release, the lever should still brake, and a touch of throttle should cancel the regen.
+
+The script hasn't been tested on hardware yet. If VESC Tool's LispBM console shows an error, send it over.
+
+### Throttle only (no brake lever)
 
 1. **App Settings → General → App to Use:** `ADC`.
 2. **App Settings → ADC → General → Control Type:** `Current No Reverse Brake Center`.
