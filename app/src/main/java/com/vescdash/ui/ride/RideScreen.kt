@@ -93,6 +93,7 @@ fun RideScreen(vm: MainViewModel, onHome: () -> Unit) {
                 when (style) {
                     RideStyle.CLASSIC -> ClassicRide(data, c, cycleMode, onHome)
                     RideStyle.MINIMAL -> MinimalRide(data, c, cycleMode, onHome)
+                    RideStyle.TILES -> TilesRide(data, c, cycleMode, onHome)
                 }
             }
         }

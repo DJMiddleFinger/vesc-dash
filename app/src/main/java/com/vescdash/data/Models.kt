@@ -47,6 +47,7 @@ data class VehicleSettings(
 enum class RideStyle(val label: String) {
     CLASSIC("Classic gauge"),
     MINIMAL("Minimal"),
+    TILES("Tiles"),
 }
 
 @Serializable

@@ -46,7 +46,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -74,6 +73,7 @@ import com.vescdash.data.Metric
 import com.vescdash.data.ModeApplyStatus
 import com.vescdash.data.RideTheme
 import com.vescdash.data.defaultThresholds
+import com.vescdash.data.unit
 import com.vescdash.data.value
 import com.vescdash.ui.MainViewModel
 import com.vescdash.ui.theme.WideFont
@@ -108,6 +108,12 @@ internal class RidePalette(
     val homeButton: Color,
     val homeIcon: Color,
     val watermark: Color,
+    val tilesBgTop: Color,
+    val tilesBgBottom: Color,
+    val tile: Color,
+    val tilePill: Color,
+    /** Text/icons drawn on top of a battery-coloured pill. */
+    val onAccent: Color,
 ) {
     companion object {
         val Dark = RidePalette(
@@ -121,6 +127,8 @@ internal class RidePalette(
             heatStart = Color(0xFFFFD60A),
             pill = Color(0xFF2A2A2D), pillBorder = Color(0xFF414146),
             homeButton = Color(0xFFDADADD), homeIcon = Color(0xFF1A1A1C), watermark = Color(0xFF2A2A2E),
+            tilesBgTop = Color(0xFF131416), tilesBgBottom = Color(0xFF060607),
+            tile = Color(0xFF1C1D20), tilePill = Color(0xFF2D2E32), onAccent = Color(0xFF0B0B0C),
         )
         val Light = RidePalette(
             bg = Color(0xFFE8E8EC), minimalBg = Color(0xFFF5F5F7),
@@ -133,6 +141,8 @@ internal class RidePalette(
             heatStart = Color(0xFFD9A400),
             pill = Color(0xFFE6E6EA), pillBorder = Color(0xFFCDCDD3),
             homeButton = Color(0xFF26262A), homeIcon = Color(0xFFF2F2F4), watermark = Color(0xFFCFCFD4),
+            tilesBgTop = Color(0xFFF4F4F6), tilesBgBottom = Color(0xFFE4E4E8),
+            tile = Color(0xFFFFFFFF), tilePill = Color(0xFFECECEF), onAccent = Color(0xFFFFFFFF),
         )
     }
 }
@@ -171,14 +181,30 @@ internal val MOTOR_RED_C = Metric.TEMP_MOTOR.defaultThresholds()!!.second
 internal fun heatFraction(tempC: Double, startC: Double, redAtC: Double): Float =
     if (redAtC <= startC) 1f else ((tempC - startC) / (redAtC - startC)).toFloat().coerceIn(0f, 1f)
 
-/** Yellow at [startC], shifting through orange to red at [redAtC]. */
-internal fun heatColor(tempC: Double, startC: Double, redAtC: Double, c: RidePalette): Color =
-    lerp(c.heatStart, c.red, heatFraction(tempC, startC, redAtC))
+/**
+ * Yellow at [startC], shifting to red at [redAtC]. The blend is front-loaded so the icon is
+ * already orange-red about a quarter of the way to the danger point.
+ */
+internal fun heatColor(tempC: Double, startC: Double, redAtC: Double, c: RidePalette): Color {
+    val f = heatFraction(tempC, startC, redAtC)
+    val k = 1f - f
+    val eased = 1f - k * k * k * k
+    // Straight channel blend: yellow → orange → red, reaching red sooner than a perceptual blend.
+    return Color(
+        red = c.heatStart.red + (c.red.red - c.heatStart.red) * eased,
+        green = c.heatStart.green + (c.red.green - c.heatStart.green) * eased,
+        blue = c.heatStart.blue + (c.red.blue - c.heatStart.blue) * eased,
+    )
+}
 
 /** Everything a ride screen shows, already converted to display units. */
 internal class RideData(
     val speed: Double?,
     val speedUnit: String,
+    val powerKw: Double?,
+    val trip: Double?,
+    val tripUnit: String,
+    val motorTempC: Double?,
     val battery: Double?,
     /** Motor current as a fraction of the max: −1 (full regen) … 1 (full drive). */
     val torque: Float,
@@ -223,6 +249,10 @@ internal fun collectRideData(vm: MainViewModel): RideData {
     return RideData(
         speed = t?.let { Metric.SPEED.value(it, vehicle) },
         speedUnit = if (vehicle.imperial) "mph" else "kmh",
+        powerKw = t?.let { Metric.POWER.value(it, vehicle) },
+        trip = t?.let { Metric.TRIP.value(it, vehicle) },
+        tripUnit = Metric.TRIP.unit(vehicle),
+        motorTempC = t?.tempMotor,
         battery = battery,
         torque = t?.let { (it.motorCurrent / motorMax).toFloat().coerceIn(-1f, 1f) } ?: 0f,
         modeNumber = activeIndex + 1,
@@ -369,9 +399,10 @@ internal fun DrawScope.drawIcon(p: VectorPainter, center: Offset, size: Float, c
 }
 
 /**
- * Vertical stack of warning icons starting at ([x], [y]), each [size] px. Heat warnings show
- * the part (chip = controller, motor outline = motor) with a thermometer badge and the
- * temperature, coloured yellow → red; at their red point they blink with [pulse].
+ * Stack of warning icons starting at ([x], [y]), each [size] px — downward, or left-to-right
+ * when [horizontal]. Heat warnings show the part (chip = controller, motor outline = motor)
+ * with a thermometer badge and the temperature, coloured yellow → red; at their red point
+ * they blink with [pulse].
  */
 internal fun DrawScope.drawWarningStack(
     m: TextMeasurer,
@@ -382,11 +413,13 @@ internal fun DrawScope.drawWarningStack(
     y: Float,
     size: Float,
     pulse: Float,
+    horizontal: Boolean = false,
 ) {
     val stroke = size * 0.06f
+    var cx = x
     var cy = y
     for (w in warnings) {
-        val center = Offset(x, cy)
+        val center = Offset(cx, cy)
         when (w) {
             RideWarning.NoLink -> {
                 drawCircle(c.amber, size / 2f, center, style = Stroke(stroke))
@@ -402,13 +435,21 @@ internal fun DrawScope.drawWarningStack(
             is RideWarning.Fault -> {
                 val r = size * 0.36f
                 drawCircle(c.red, r, center, style = Stroke(stroke))
-                drawLine(c.red, Offset(x - size / 2f, cy), Offset(x - r, cy), strokeWidth = stroke)
-                drawLine(c.red, Offset(x + r, cy), Offset(x + size / 2f, cy), strokeWidth = stroke)
+                drawLine(c.red, Offset(cx - size / 2f, cy), Offset(cx - r, cy), strokeWidth = stroke)
+                drawLine(c.red, Offset(cx + r, cy), Offset(cx + size / 2f, cy), strokeWidth = stroke)
                 drawCentered(m, AnnotatedString("M"), wide(r * 0.95f, c.red), center)
-                drawCentered(m, AnnotatedString(w.text), wide(size * 0.26f, c.red), Offset(x + size * 0.7f, cy), alignX = 0f)
+                drawCentered(m, AnnotatedString(w.text), wide(size * 0.26f, c.red), Offset(cx + size * 0.7f, cy), alignX = 0f)
             }
         }
-        cy += size * 1.35f
+        if (horizontal) {
+            // Heat warnings carry a temperature to their right, so they need more room.
+            cx += size * when (w) {
+                is RideWarning.ControllerHot, is RideWarning.MotorHot -> 3.1f
+                else -> 1.5f
+            }
+        } else {
+            cy += size * 1.35f
+        }
     }
 }
 
