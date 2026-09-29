@@ -155,24 +155,25 @@ internal fun batteryColor(pct: Double?, c: RidePalette): Color = when {
 internal sealed interface RideWarning {
     data object NoLink : RideWarning
     data class LowBattery(val critical: Boolean) : RideWarning
-    data class ControllerHot(val tempC: Double) : RideWarning
-    data class MotorHot(val tempC: Double) : RideWarning
+    data class ControllerHot(val tempC: Double, val startC: Double) : RideWarning
+    data class MotorHot(val tempC: Double, val startC: Double) : RideWarning
     data class Fault(val text: String) : RideWarning
 }
 
-/** Heat icons appear at this temperature in yellow… */
-internal const val HEAT_START_C = 60.0
-/** …and are fully red (and pulsing) at the same danger points the dashboard uses. */
+/**
+ * Heat icons appear in yellow at the temperature set in Setup and are fully red (and
+ * pulsing) at the same danger points the dashboard uses.
+ */
 internal val CONTROLLER_RED_C = Metric.TEMP_FET.defaultThresholds()!!.second
 internal val MOTOR_RED_C = Metric.TEMP_MOTOR.defaultThresholds()!!.second
 
-/** 0 at [HEAT_START_C], 1 at [redAtC]. */
-internal fun heatFraction(tempC: Double, redAtC: Double): Float =
-    ((tempC - HEAT_START_C) / (redAtC - HEAT_START_C)).toFloat().coerceIn(0f, 1f)
+/** 0 at [startC], 1 at [redAtC] (or immediately, if the icon is set to appear past red). */
+internal fun heatFraction(tempC: Double, startC: Double, redAtC: Double): Float =
+    if (redAtC <= startC) 1f else ((tempC - startC) / (redAtC - startC)).toFloat().coerceIn(0f, 1f)
 
-/** Yellow at 60 °C, shifting through orange to red at [redAtC]. */
-internal fun heatColor(tempC: Double, redAtC: Double, c: RidePalette): Color =
-    lerp(c.heatStart, c.red, heatFraction(tempC, redAtC))
+/** Yellow at [startC], shifting through orange to red at [redAtC]. */
+internal fun heatColor(tempC: Double, startC: Double, redAtC: Double, c: RidePalette): Color =
+    lerp(c.heatStart, c.red, heatFraction(tempC, startC, redAtC))
 
 /** Everything a ride screen shows, already converted to display units. */
 internal class RideData(
@@ -210,8 +211,12 @@ internal fun collectRideData(vm: MainViewModel): RideData {
     val warnings = buildList {
         if (t == null || stale) add(RideWarning.NoLink)
         if (battery != null && battery < 20) add(RideWarning.LowBattery(critical = battery < 10))
-        if (t != null && t.tempFet >= HEAT_START_C) add(RideWarning.ControllerHot(t.tempFet))
-        if (t != null && t.tempMotor >= HEAT_START_C) add(RideWarning.MotorHot(t.tempMotor))
+        if (t != null && t.tempFet >= vehicle.heatWarnControllerC) {
+            add(RideWarning.ControllerHot(t.tempFet, vehicle.heatWarnControllerC))
+        }
+        if (t != null && t.tempMotor >= vehicle.heatWarnMotorC) {
+            add(RideWarning.MotorHot(t.tempMotor, vehicle.heatWarnMotorC))
+        }
         if (t != null && t.fault != 0) add(RideWarning.Fault(VescProtocol.faultName(t.fault)))
     }
 
@@ -388,10 +393,10 @@ internal fun DrawScope.drawWarningStack(
                 drawIcon(icons.btOff, center, size * 0.58f, c.amber)
             }
             is RideWarning.LowBattery -> drawIcon(icons.batteryAlert, center, size, if (w.critical) c.red else c.amber)
-            is RideWarning.ControllerHot -> drawHeatWarning(m, icons, c, center, size, w.tempC, CONTROLLER_RED_C, "CTRL", pulse) { color ->
+            is RideWarning.ControllerHot -> drawHeatWarning(m, icons, c, center, size, w.tempC, w.startC, CONTROLLER_RED_C, "CTRL", pulse) { color ->
                 drawIcon(icons.chip, center, size * 0.9f, color)
             }
-            is RideWarning.MotorHot -> drawHeatWarning(m, icons, c, center, size, w.tempC, MOTOR_RED_C, "MOTOR", pulse) { color ->
+            is RideWarning.MotorHot -> drawHeatWarning(m, icons, c, center, size, w.tempC, w.startC, MOTOR_RED_C, "MOTOR", pulse) { color ->
                 drawMotorGlyph(center, size * 0.9f, color)
             }
             is RideWarning.Fault -> {
@@ -414,13 +419,14 @@ private fun DrawScope.drawHeatWarning(
     center: Offset,
     size: Float,
     tempC: Double,
+    startC: Double,
     redAtC: Double,
     label: String,
     pulse: Float,
     glyph: DrawScope.(Color) -> Unit,
 ) {
     val alpha = if (tempC >= redAtC) pulse else 1f
-    val color = heatColor(tempC, redAtC, c).copy(alpha = alpha)
+    val color = heatColor(tempC, startC, redAtC, c).copy(alpha = alpha)
     glyph(color)
     // Thermometer badge in the lower-right corner
     val badge = size * 0.5f

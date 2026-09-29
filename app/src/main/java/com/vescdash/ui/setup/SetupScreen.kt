@@ -31,6 +31,8 @@ import com.vescdash.ui.common.Card
 import com.vescdash.ui.common.SettingNumber
 import com.vescdash.ui.common.SettingSwitch
 import com.vescdash.ui.modes.fmtKw
+import com.vescdash.ui.ride.CONTROLLER_RED_C
+import com.vescdash.ui.ride.MOTOR_RED_C
 import com.vescdash.ui.theme.Palette
 import kotlin.math.roundToInt
 
@@ -120,6 +122,24 @@ fun SetupScreen(vm: MainViewModel) {
                 suffix = "Ah",
                 help = "Optional. With capacity set, charge used is counted directly for the steadiest reading. 0 = unknown.",
             ) { x -> vm.updateVehicle { it.copy(batteryCapacityAh = x) } }
+        }
+
+        Card(title = "HEAT WARNINGS  ·  RIDE VIEW") {
+            Text(
+                "The icon pops up at these temperatures in yellow, then turns red as it heats up — " +
+                    "fully red and flashing at ${CONTROLLER_RED_C.roundToInt()} °C (controller) and ${MOTOR_RED_C.roundToInt()} °C (motor).",
+                color = Palette.TextDim,
+                fontSize = 12.sp,
+            )
+            Row {
+                SettingNumber("Controller", v.heatWarnControllerC, 20.0..150.0, Modifier.weight(1f), suffix = "°C") { x ->
+                    vm.updateVehicle { it.copy(heatWarnControllerC = x) }
+                }
+                Spacer(Modifier.width(10.dp))
+                SettingNumber("Motor", v.heatWarnMotorC, 20.0..150.0, Modifier.weight(1f), suffix = "°C") { x ->
+                    vm.updateVehicle { it.copy(heatWarnMotorC = x) }
+                }
+            }
         }
 
         Card(title = "BASE LIMITS  ·  FROM VESC TOOL") {

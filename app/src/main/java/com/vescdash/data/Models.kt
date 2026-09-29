@@ -35,6 +35,9 @@ data class VehicleSettings(
     val batteryStabilize: Boolean = true,
     /** Pack capacity in Ah; 0 = unknown. When set, battery % uses charge counting. */
     val batteryCapacityAh: Double = 0.0,
+    /** Ride-view heat icons appear at these temperatures (°C). */
+    val heatWarnControllerC: Double = 60.0,
+    val heatWarnMotorC: Double = 60.0,
 ) {
     val controllers: Int get() = if (dualController) 2 else 1
     val nominalVoltage: Double get() = cellsSeries * 3.7
