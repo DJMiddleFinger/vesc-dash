@@ -28,6 +28,7 @@ data class VehicleSettings(
     val pollHz: Int = 10,
     val keepScreenOn: Boolean = true,
     val applyModeOnConnect: Boolean = true,
+    val demoMode: Boolean = false,
 ) {
     val controllers: Int get() = if (dualController) 2 else 1
     val nominalVoltage: Double get() = cellsSeries * 3.7

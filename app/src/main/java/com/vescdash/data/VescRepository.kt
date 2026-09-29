@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
@@ -26,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.abs
 
 sealed interface ModeApplyStatus {
     data object Idle : ModeApplyStatus
@@ -73,6 +76,17 @@ class VescRepository(
     private val _modeStatus = MutableStateFlow<ModeApplyStatus>(ModeApplyStatus.Idle)
     val modeStatus: StateFlow<ModeApplyStatus> = _modeStatus.asStateFlow()
 
+    private val _demoActive = MutableStateFlow(false)
+    /** Simulated data is playing because demo mode is on and no VESC is connected. */
+    val demoActive: StateFlow<Boolean> = _demoActive.asStateFlow()
+
+    private val _rideTimeMs = MutableStateFlow(0L)
+    /** Time spent moving since the app started. */
+    val rideTimeMs: StateFlow<Long> = _rideTimeMs.asStateFlow()
+
+    private val historyBuf = ArrayDeque<Telemetry>()
+    private var demoJob: Job? = null
+
     private val decoder = PacketDecoder()
     private val payloads = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
     private val requestMutex = Mutex()
@@ -107,6 +121,11 @@ class VescRepository(
                     is VescBleTransport.State.Connecting -> Unit
                 }
             }
+        }
+        scope.launch {
+            combine(vehicle, transport.state) { v, s -> v.demoMode && s !is VescBleTransport.State.Connected }
+                .distinctUntilChanged()
+                .collect { on -> if (on) startDemo() else stopDemo() }
         }
     }
 
@@ -154,8 +173,7 @@ class VescRepository(
         decoder.reset()
         _stale.value = false
         pollJob = scope.launch {
-            val buffer = ArrayDeque<Telemetry>()
-            _history.value = emptyList()
+            clearHistory()
 
             _firmware.value = request(VescProtocol.fwVersion(), CommPacketId.FW_VERSION, 1_500)
                 ?.let(VescProtocol::parseFwVersion)
@@ -179,12 +197,7 @@ class VescRepository(
                 if (local != null) {
                     misses = 0
                     _stale.value = false
-                    val t = Telemetry.from(local, remote, System.currentTimeMillis())
-                    _telemetry.value = t
-                    buffer.addLast(t)
-                    val maxSamples = 30 * v.pollHz.coerceIn(1, 30)
-                    while (buffer.size > maxSamples) buffer.removeFirst()
-                    _history.value = buffer.toList()
+                    publish(Telemetry.from(local, remote, System.currentTimeMillis()))
                 } else if (++misses >= 5) {
                     _stale.value = true
                 }
@@ -200,6 +213,56 @@ class VescRepository(
         pollJob = null
         _telemetry.value = null
         _stale.value = false
+    }
+
+    private fun publish(t: Telemetry) {
+        val v = vehicle.value
+        val prev = _telemetry.value
+        if (prev != null && abs(VehicleMath.speedKmhForErpm(t.erpm, v)) > 1.5) {
+            _rideTimeMs.value += (t.timeMs - prev.timeMs).coerceIn(0L, 2_000L)
+        }
+        _telemetry.value = t
+        synchronized(historyBuf) {
+            historyBuf.addLast(t)
+            val maxSamples = 30 * v.pollHz.coerceIn(1, 30)
+            while (historyBuf.size > maxSamples) historyBuf.removeFirst()
+            _history.value = historyBuf.toList()
+        }
+    }
+
+    private fun clearHistory() = synchronized(historyBuf) {
+        historyBuf.clear()
+        _history.value = emptyList()
+    }
+
+    // ---- demo -------------------------------------------------------------
+
+    private fun startDemo() {
+        demoJob?.cancel()
+        _demoActive.value = true
+        clearHistory()
+        demoJob = scope.launch {
+            val sim = DemoSimulator()
+            var last = SystemClock.elapsedRealtime()
+            while (isActive) {
+                delay(1000L / vehicle.value.pollHz.coerceIn(1, 30))
+                val now = SystemClock.elapsedRealtime()
+                publish(sim.step((now - last) / 1000.0, vehicle.value, activeMode()))
+                last = now
+            }
+        }
+    }
+
+    private fun stopDemo() {
+        demoJob?.cancel()
+        demoJob = null
+        if (_demoActive.value) {
+            _demoActive.value = false
+            if (!isConnected) {
+                _telemetry.value = null
+                clearHistory()
+            }
+        }
     }
 
     /** Send a command and wait for the reply whose first byte is [expect]. One request in flight at a time. */

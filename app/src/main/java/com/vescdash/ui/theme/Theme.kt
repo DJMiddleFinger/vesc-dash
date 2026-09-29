@@ -6,6 +6,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import com.vescdash.R
 
 object Palette {
     val Bg = Color(0xFF08080A)
@@ -19,6 +22,9 @@ object Palette {
     val Good = Color(0xFF30D158)
     val DefaultAccent = Color(0xFFFF6A00)
 }
+
+/** Wide geometric face used by the landscape ride screen (Michroma, SIL OFL). */
+val WideFont = FontFamily(Font(R.font.michroma))
 
 /** Tabular figures so numbers don't jitter as they change. */
 val NumberStyle = TextStyle(fontFeatureSettings = "tnum")

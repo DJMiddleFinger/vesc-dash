@@ -35,6 +35,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val activeModeId = repo.activeModeId
     val dashboards = repo.dashboards
     val lastDevice = repo.lastDevice
+    val demoActive = repo.demoActive
+    val rideTimeMs = repo.rideTimeMs
 
     // ---- scanning ---------------------------------------------------------
 

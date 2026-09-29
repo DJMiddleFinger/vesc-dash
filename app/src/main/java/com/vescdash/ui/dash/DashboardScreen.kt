@@ -79,6 +79,7 @@ fun DashboardScreen(vm: MainViewModel, onConnectClick: () -> Unit) {
     val activeId by vm.activeModeId.collectAsStateWithLifecycle()
     val modeStatus by vm.modeStatus.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
+    val demoActive by vm.demoActive.collectAsStateWithLifecycle()
 
     var editing by rememberSaveable { mutableStateOf(false) }
     var editorTarget by remember { mutableStateOf<EditorTarget?>(null) }
@@ -93,7 +94,9 @@ fun DashboardScreen(vm: MainViewModel, onConnectClick: () -> Unit) {
 
         val fault = telemetry?.fault ?: 0
         if (fault != 0) Banner("⚠ FAULT: ${VescProtocol.faultName(fault)}", Palette.Danger)
-        if (!connected) {
+        if (demoActive) {
+            Banner("Demo mode — showing simulated data. Turn it off in Setup.", Palette.Warn)
+        } else if (!connected) {
             Banner(
                 "Not connected — tap here to find your VESC",
                 MaterialTheme.colorScheme.primary,

@@ -4,6 +4,8 @@ An Android app that connects to a VESC motor controller over Bluetooth and gives
 
 - **A customizable live dashboard.** You get several swipeable pages of widgets (number, gauge, bar, live graph). Each widget can show any metric, with its own size, scale and warning/danger colors.
 - **Drive modes you can switch between.** Up to 6 modes, one tap to switch from the dashboard, in a Stark Varg-style mode strip.
+- **A full-screen ride view in landscape** laid out like the Stark Varg ride screen. It shows power mode, battery level and riding time across the top, a segmented battery arc, a torque/regen bar and big speed digits. Tap the ⚡ pill to change modes. When you're stopped, a home button takes you back to the app, and the ride view returns once you're moving above 5 km/h.
+- **Demo mode** (Setup → Controller) plays simulated ride data so you can try the UI without a VESC.
 - **A basic power tuner for each mode.** Sliders set power %, regen braking %, top speed limit and power cap. It shows an estimated peak kW/hp and a power-vs-speed curve compared against 100%.
 
 ## Build & install
@@ -54,6 +56,10 @@ app/src/main/java/com/vescdash/
 ```
 
 Run the protocol unit tests with **Gradle → app → Tasks → verification → test**, or with `./gradlew test` once Android Studio has generated the wrapper.
+
+## Credits
+
+The ride view uses the [Michroma](https://github.com/googlefonts/Michroma-font) typeface, licensed under the SIL Open Font License 1.1 (see `licenses/Michroma-OFL.txt`). The ride view is inspired by the Stark Varg's dashboard; this project is not affiliated with Stark Future.
 
 ## Safety
 

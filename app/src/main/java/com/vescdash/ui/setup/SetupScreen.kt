@@ -124,6 +124,9 @@ fun SetupScreen(vm: MainViewModel) {
             SettingSwitch("Keep screen on", v.keepScreenOn, "While connected") { on ->
                 vm.updateVehicle { it.copy(keepScreenOn = on) }
             }
+            SettingSwitch("Demo mode", v.demoMode, "Play simulated ride data when no VESC is connected") { on ->
+                vm.updateVehicle { it.copy(demoMode = on) }
+            }
             SettingNumber("Update rate", v.pollHz.toDouble(), 1.0..30.0, integer = true, suffix = "Hz", help = "10 Hz is plenty over BLE") { x ->
                 vm.updateVehicle { it.copy(pollHz = x.toInt()) }
             }
