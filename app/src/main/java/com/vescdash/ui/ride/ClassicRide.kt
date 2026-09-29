@@ -87,7 +87,8 @@ internal fun ClassicRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
  * Angles follow Compose's convention: 0° = 3 o'clock, increasing clockwise.
  */
 private class RideGeometry(val w: Float, val h: Float, val c: RidePalette) {
-    val k = min(h, w / 1.9f)
+    // 0.93·h leaves a clear gap between the top of the dial's numbers and the panels above.
+    val k = min(0.93f * h, w / 1.9f)
     val cx = w / 2f
     val cy = h + 0.41f * k
 
