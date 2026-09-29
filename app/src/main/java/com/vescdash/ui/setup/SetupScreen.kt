@@ -127,7 +127,9 @@ fun SetupScreen(vm: MainViewModel) {
         Card(title = "HEAT WARNINGS  ·  RIDE VIEW") {
             Text(
                 "The icon pops up at these temperatures in yellow, then turns red as it heats up — " +
-                    "fully red and flashing at ${CONTROLLER_RED_C.roundToInt()} °C (controller) and ${MOTOR_RED_C.roundToInt()} °C (motor).",
+                    "fully red and flashing at ${CONTROLLER_RED_C.roundToInt()} °C (controller) and ${MOTOR_RED_C.roundToInt()} °C (motor). " +
+                    "Motor temperature needs a sensor in the motor wired to the VESC and selected in VESC Tool " +
+                    "(Motor Temperature Sensor Type); without one it shows --.",
                 color = Palette.TextDim,
                 fontSize = 12.sp,
             )

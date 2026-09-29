@@ -10,8 +10,9 @@ data class Telemetry(
     val motorCurrent: Double,
     val duty: Double,
     val erpm: Double,
-    val tempFet: Double,
-    val tempMotor: Double,
+    /** °C, or null when the VESC has no reading (see [sensorTemp]). */
+    val tempFet: Double?,
+    val tempMotor: Double?,
     val ahUsed: Double,
     val ahCharged: Double,
     val whUsed: Double,
@@ -32,8 +33,8 @@ data class Telemetry(
                 motorCurrent = all.sumOf { it.currentMotor },
                 duty = local.duty,
                 erpm = local.erpm,
-                tempFet = all.maxOf { it.tempFet },
-                tempMotor = all.maxOf { it.tempMotor },
+                tempFet = all.mapNotNull { sensorTemp(it.tempFet) }.maxOrNull(),
+                tempMotor = all.mapNotNull { sensorTemp(it.tempMotor) }.maxOrNull(),
                 ahUsed = all.sumOf { it.ampHours },
                 ahCharged = all.sumOf { it.ampHoursCharged },
                 whUsed = all.sumOf { it.wattHours },
@@ -45,6 +46,14 @@ data class Telemetry(
         }
     }
 }
+
+/**
+ * A VESC reports exactly 0.0 for a temperature it isn't measuring — e.g. motor sensor type
+ * "Disabled" returns the (default 0) override value — and far out-of-range values for an
+ * unplugged thermistor. Treat both as "no reading".
+ */
+fun sensorTemp(celsius: Double): Double? =
+    if (celsius == 0.0 || celsius < -50.0 || celsius > 250.0) null else celsius
 
 object Battery {
     private val curve = listOf(

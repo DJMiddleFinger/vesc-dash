@@ -42,7 +42,8 @@ fun Metric.unit(v: VehicleSettings): String = when (this) {
     Metric.AH_USED -> "Ah"
 }
 
-fun Metric.value(t: Telemetry, v: VehicleSettings): Double = when (this) {
+/** Current value in display units, or null when the VESC has no reading for it. */
+fun Metric.value(t: Telemetry, v: VehicleSettings): Double? = when (this) {
     Metric.SPEED -> abs(VehicleMath.speedKmhForErpm(t.erpm, v)) * distFactor(v)
     Metric.POWER -> t.voltage * t.batteryCurrent / 1000.0
     Metric.BATTERY -> if (!t.batteryPct.isNaN()) t.batteryPct else Battery.percent(t.voltage / v.cellsSeries.coerceAtLeast(1))

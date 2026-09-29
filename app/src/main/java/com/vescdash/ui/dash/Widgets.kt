@@ -279,7 +279,7 @@ private fun GraphWidget(
     vehicle: VehicleSettings,
     accent: Color,
 ) {
-    val points = remember(history, vehicle, widget.metric) { history.map { widget.metric.value(it, vehicle) } }
+    val points = remember(history, vehicle, widget.metric) { history.mapNotNull { widget.metric.value(it, vehicle) } }
     val color = levelColor(value, r.warn, r.danger, accent)
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.Bottom) {

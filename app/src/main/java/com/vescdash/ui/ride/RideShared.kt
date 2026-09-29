@@ -238,12 +238,8 @@ internal fun collectRideData(vm: MainViewModel): RideData {
     val warnings = buildList {
         if (t == null || stale) add(RideWarning.NoLink)
         if (battery != null && battery < 20) add(RideWarning.LowBattery(critical = battery < 10))
-        if (t != null && t.tempFet >= vehicle.heatWarnControllerC) {
-            add(RideWarning.ControllerHot(t.tempFet, vehicle.heatWarnControllerC))
-        }
-        if (t != null && t.tempMotor >= vehicle.heatWarnMotorC) {
-            add(RideWarning.MotorHot(t.tempMotor, vehicle.heatWarnMotorC))
-        }
+        t?.tempFet?.let { if (it >= vehicle.heatWarnControllerC) add(RideWarning.ControllerHot(it, vehicle.heatWarnControllerC)) }
+        t?.tempMotor?.let { if (it >= vehicle.heatWarnMotorC) add(RideWarning.MotorHot(it, vehicle.heatWarnMotorC)) }
         if (t != null && t.fault != 0) add(RideWarning.Fault(VescProtocol.faultName(t.fault)))
     }
 
