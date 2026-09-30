@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vescdash.data.DashWidget
@@ -61,9 +63,11 @@ import com.vescdash.data.defaultRange
 import com.vescdash.data.format
 import com.vescdash.data.unit
 import com.vescdash.data.value
-import com.vescdash.ui.theme.NumberStyle
+import com.vescdash.ui.theme.LocalWidgetTheme
 import com.vescdash.ui.theme.Palette
+import com.vescdash.ui.theme.WidgetTheme
 import kotlin.math.max
+import kotlin.math.min
 
 /** A widget with its defaults filled in for the current vehicle. */
 data class ResolvedWidget(
@@ -91,13 +95,13 @@ fun fraction(value: Double?, min: Double, max: Double): Float =
     if (value == null || max <= min) 0f else ((value - min) / (max - min)).toFloat().coerceIn(0f, 1f)
 
 /** Danger below warning means low values are the problem (e.g. battery). */
-fun levelColor(value: Double?, warn: Double?, danger: Double?, normal: Color): Color {
+fun levelColor(value: Double?, warn: Double?, danger: Double?, normal: Color, theme: WidgetTheme): Color {
     if (value == null || (warn == null && danger == null)) return normal
     val lowIsBad = warn != null && danger != null && danger < warn
     fun hit(t: Double?) = t != null && (if (lowIsBad) value <= t else value >= t)
     return when {
-        hit(danger) -> Palette.Danger
-        hit(warn) -> Palette.Warn
+        hit(danger) -> theme.danger
+        hit(warn) -> theme.warn
         else -> normal
     }
 }
@@ -125,9 +129,6 @@ fun WidgetCard(
     onDelete: () -> Unit,
 ) {
     val shape = RoundedCornerShape(20.dp)
-    val accent = MaterialTheme.colorScheme.primary
-    val r = widget.resolve(vehicle)
-    val value = telemetry?.let { widget.metric.value(it, vehicle) }
 
     Box(
         modifier
@@ -137,12 +138,7 @@ fun WidgetCard(
             .background(Palette.Surface)
             .then(if (editing) Modifier.border(1.dp, Palette.Outline, shape) else Modifier),
     ) {
-        when (widget.type) {
-            WidgetType.NUMBER -> NumberWidget(r, widget.metric, value, big = widget.size == WidgetSize.FULL)
-            WidgetType.GAUGE -> GaugeWidget(r, widget.metric, value, accent)
-            WidgetType.BAR -> BarWidget(r, widget.metric, value, accent)
-            WidgetType.GRAPH -> GraphWidget(widget, r, value, history, historyCapacity, vehicle, accent)
-        }
+        WidgetBody(widget, telemetry, history, historyCapacity, vehicle)
         AnimatedVisibility(
             visible = editing,
             modifier = Modifier.matchParentSize(),
@@ -166,59 +162,105 @@ fun WidgetCard(
     }
 }
 
+/** A widget's content without the Dash tab's card and edit overlay; the ride screen draws these directly. */
+@Composable
+fun WidgetBody(
+    widget: DashWidget,
+    telemetry: Telemetry?,
+    history: List<Telemetry>,
+    historyCapacity: Int,
+    vehicle: VehicleSettings,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val r = widget.resolve(vehicle)
+    val value = telemetry?.let { widget.metric.value(it, vehicle) }
+    when (widget.type) {
+        WidgetType.NUMBER -> NumberWidget(r, widget.metric, value, big = widget.size == WidgetSize.FULL)
+        WidgetType.GAUGE -> GaugeWidget(r, widget.metric, value, accent)
+        WidgetType.BAR -> BarWidget(r, widget.metric, value, accent)
+        WidgetType.GRAPH -> GraphWidget(widget, r, value, history, historyCapacity, vehicle, accent)
+    }
+}
+
 @Composable
 private fun EditButton(icon: ImageVector, description: String, onClick: () -> Unit, tint: Color = Palette.Fg) {
     IconButton(onClick = onClick) { Icon(icon, contentDescription = description, tint = tint) }
 }
 
 @Composable
-private fun WidgetLabel(text: String, modifier: Modifier = Modifier) {
+private fun WidgetLabel(text: String, modifier: Modifier = Modifier, size: TextUnit = 11.sp) {
+    val theme = LocalWidgetTheme.current
     Text(
         text.uppercase(),
         modifier = modifier,
-        color = Palette.TextDim,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 1.2.sp,
+        color = theme.dim,
+        fontSize = size,
+        style = LocalTextStyle.current.merge(theme.label),
         maxLines = 1,
     )
 }
 
 @Composable
 private fun NumberWidget(r: ResolvedWidget, metric: Metric, value: Double?, big: Boolean) {
-    val color = levelColor(value, r.warn, r.danger, Palette.Fg)
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        WidgetLabel(r.label)
-        Spacer(Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                metric.format(value),
-                style = NumberStyle,
-                color = color,
-                fontSize = if (big) 54.sp else 40.sp,
-                fontWeight = FontWeight.Black,
-                maxLines = 1,
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(r.unit, color = Palette.TextDim, fontSize = 14.sp, modifier = Modifier.padding(bottom = 8.dp))
+    val theme = LocalWidgetTheme.current
+    val color = levelColor(value, r.warn, r.danger, theme.fg, theme)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val u = minOf(maxWidth.value, maxHeight.value)
+        val padH = theme.scale(16f, u, 0.1f)
+        val unitSize = theme.scale(14f, u, 0.1f, min = 9f)
+        val numberSize = if (theme.scaleToBox) {
+            // The wide face runs about 0.95 em a digit: cap the size so the biggest expected reading and unit still fit.
+            val chars = max(2, metric.format(r.max).length) + 1
+            min(0.5f * u, (maxWidth.value - 2 * padH - unitSize * (r.unit.length * 0.6f + 1f)) / (chars * 0.95f))
+        } else {
+            if (big) 54f else 40f
+        }
+        Column(Modifier.fillMaxSize().padding(horizontal = padH.dp, vertical = theme.scale(12f, u, 0.08f).dp)) {
+            WidgetLabel(r.label, size = theme.labelSize(u, 0.11f).sp)
+            Spacer(Modifier.weight(1f))
+            // On the ride screen the reading sits in the middle of its box; on the Dash tab, bottom left.
+            Row(
+                if (theme.scaleToBox) Modifier.fillMaxWidth() else Modifier,
+                horizontalArrangement = if (theme.scaleToBox) Arrangement.Center else Arrangement.Start,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text(
+                    metric.format(value),
+                    style = theme.number,
+                    color = color,
+                    fontSize = numberSize.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.width(theme.scale(6f, u, 0.04f).dp))
+                Text(
+                    r.unit,
+                    color = theme.dim,
+                    fontSize = unitSize.sp,
+                    modifier = Modifier.padding(bottom = theme.scale(8f, numberSize, 0.2f).dp),
+                )
+            }
+            if (theme.scaleToBox) Spacer(Modifier.weight(1f))
         }
     }
 }
 
 @Composable
 private fun GaugeWidget(r: ResolvedWidget, metric: Metric, value: Double?, accent: Color) {
+    val theme = LocalWidgetTheme.current
     val target = fraction(value, r.min, r.max)
     val animated by animateFloatAsState(target, animationSpec = tween(150), label = "gauge")
-    val color = levelColor(value, r.warn, r.danger, accent)
+    val color = levelColor(value, r.warn, r.danger, accent, theme)
 
     BoxWithConstraints(Modifier.fillMaxSize().padding(12.dp)) {
-        val numberSize = (minOf(maxWidth.value, maxHeight.value) * 0.24f).sp
+        val u = minOf(maxWidth.value, maxHeight.value)
+        val numberSize = (u * 0.24f).sp
         Canvas(Modifier.fillMaxSize()) {
             val stroke = size.minDimension * 0.085f
             val diameter = size.minDimension - stroke
             val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f + diameter * 0.08f)
             val arcSize = Size(diameter, diameter)
-            drawArc(Palette.Outline, 150f, 240f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+            drawArc(theme.outline, 150f, 240f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
             if (animated > 0.002f) {
                 drawArc(color, 150f, 240f * animated, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
             }
@@ -226,45 +268,65 @@ private fun GaugeWidget(r: ResolvedWidget, metric: Metric, value: Double?, accen
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 metric.format(value),
-                style = NumberStyle,
-                color = Palette.Fg,
+                style = theme.number,
+                color = theme.fg,
                 fontSize = numberSize,
                 fontWeight = FontWeight.Black,
                 maxLines = 1,
             )
-            Text(r.unit, color = Palette.TextDim, fontSize = 14.sp)
+            Text(r.unit, color = theme.dim, fontSize = theme.scale(14f, u, 0.07f, min = 9f).sp)
         }
-        WidgetLabel(r.label, Modifier.align(Alignment.BottomCenter))
+        WidgetLabel(r.label, Modifier.align(Alignment.BottomCenter), theme.labelSize(u, 0.06f).sp)
     }
 }
 
 @Composable
 private fun BarWidget(r: ResolvedWidget, metric: Metric, value: Double?, accent: Color) {
+    val theme = LocalWidgetTheme.current
     val target = fraction(value, r.min, r.max)
     val animated by animateFloatAsState(target, animationSpec = tween(150), label = "bar")
-    val color = levelColor(value, r.warn, r.danger, accent)
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 14.dp)) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            WidgetLabel(r.label, Modifier.weight(1f).padding(bottom = 4.dp))
-            Text(metric.format(value), style = NumberStyle, color = Palette.Fg, fontSize = 26.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.width(4.dp))
-            Text(r.unit, color = Palette.TextDim, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
-        }
-        Spacer(Modifier.weight(1f))
-        Box(
+    val color = levelColor(value, r.warn, r.danger, accent, theme)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val u = minOf(maxWidth.value, maxHeight.value)
+        val barHeight = theme.scale(12f, u, 0.16f).dp
+        Column(
             Modifier
-                .fillMaxWidth()
-                .height(12.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Palette.Outline),
+                .fillMaxSize()
+                .padding(horizontal = theme.scale(16f, u, 0.2f).dp, vertical = theme.scale(14f, u, 0.16f).dp),
         ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                WidgetLabel(r.label, Modifier.weight(1f).padding(bottom = 4.dp), theme.labelSize(u, 0.15f).sp)
+                Text(
+                    metric.format(value),
+                    style = theme.number,
+                    color = theme.fg,
+                    fontSize = theme.scale(26f, u, 0.3f).sp,
+                    fontWeight = FontWeight.Black,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    r.unit,
+                    color = theme.dim,
+                    fontSize = theme.scale(12f, u, 0.15f, min = 9f).sp,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            Spacer(Modifier.weight(1f))
             Box(
                 Modifier
-                    .fillMaxWidth(animated)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(color),
-            )
+                    .fillMaxWidth()
+                    .height(barHeight)
+                    .clip(RoundedCornerShape(barHeight / 2))
+                    .background(theme.outline),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(animated)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(barHeight / 2))
+                        .background(color),
+                )
+            }
         }
     }
 }
@@ -279,44 +341,63 @@ private fun GraphWidget(
     vehicle: VehicleSettings,
     accent: Color,
 ) {
+    val theme = LocalWidgetTheme.current
     val points = remember(history, vehicle, widget.metric) { history.mapNotNull { widget.metric.value(it, vehicle) } }
-    val color = levelColor(value, r.warn, r.danger, accent)
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            WidgetLabel(r.label, Modifier.weight(1f).padding(bottom = 3.dp))
-            Text(widget.metric.format(value), style = NumberStyle, color = Palette.Fg, fontSize = 22.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.width(4.dp))
-            Text(r.unit, color = Palette.TextDim, fontSize = 12.sp, modifier = Modifier.padding(bottom = 3.dp))
-        }
-        Spacer(Modifier.height(8.dp))
-        Canvas(Modifier.fillMaxWidth().weight(1f)) {
-            if (points.size < 2) return@Canvas
-            // Auto-scale to the data unless the user pinned min/max.
-            val lo = widget.min ?: minOf(points.min(), 0.0)
-            var hi = widget.max ?: points.max()
-            if (hi - lo < 1e-6) hi = lo + 1.0
-            val n = max(points.size, capacity)
-            val stepX = size.width / (n - 1)
-            val startIndex = n - points.size
-            fun x(i: Int) = (startIndex + i) * stepX
-            fun y(v: Double) = (size.height - ((v - lo) / (hi - lo)).toFloat().coerceIn(0f, 1f) * size.height)
+    val color = levelColor(value, r.warn, r.danger, accent, theme)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val u = minOf(maxWidth.value, maxHeight.value)
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = theme.scale(16f, u, 0.2f).dp, vertical = theme.scale(12f, u, 0.12f).dp),
+        ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                WidgetLabel(r.label, Modifier.weight(1f).padding(bottom = 3.dp), theme.labelSize(u, 0.15f).sp)
+                Text(
+                    widget.metric.format(value),
+                    style = theme.number,
+                    color = theme.fg,
+                    fontSize = theme.scale(22f, u, 0.24f).sp,
+                    fontWeight = FontWeight.Black,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    r.unit,
+                    color = theme.dim,
+                    fontSize = theme.scale(12f, u, 0.15f, min = 9f).sp,
+                    modifier = Modifier.padding(bottom = 3.dp),
+                )
+            }
+            Spacer(Modifier.height(theme.scale(8f, u, 0.08f).dp))
+            Canvas(Modifier.fillMaxWidth().weight(1f)) {
+                if (points.size < 2) return@Canvas
+                // Auto-scale to the data unless the user pinned min/max.
+                val lo = widget.min ?: minOf(points.min(), 0.0)
+                var hi = widget.max ?: points.max()
+                if (hi - lo < 1e-6) hi = lo + 1.0
+                val n = max(points.size, capacity)
+                val stepX = size.width / (n - 1)
+                val startIndex = n - points.size
+                fun x(i: Int) = (startIndex + i) * stepX
+                fun y(v: Double) = (size.height - ((v - lo) / (hi - lo)).toFloat().coerceIn(0f, 1f) * size.height)
 
-            if (lo < 0 && hi > 0) {
-                val zy = y(0.0)
-                drawLine(Palette.Outline, Offset(0f, zy), Offset(size.width, zy), strokeWidth = 1.dp.toPx())
+                if (lo < 0 && hi > 0) {
+                    val zy = y(0.0)
+                    drawLine(theme.outline, Offset(0f, zy), Offset(size.width, zy), strokeWidth = 1.dp.toPx())
+                }
+                val line = Path().apply {
+                    points.forEachIndexed { i, v -> if (i == 0) moveTo(x(i), y(v)) else lineTo(x(i), y(v)) }
+                }
+                val baseY = y(max(lo, 0.0).coerceAtMost(hi))
+                val fill = Path().apply {
+                    addPath(line)
+                    lineTo(x(points.lastIndex), baseY)
+                    lineTo(x(0), baseY)
+                    close()
+                }
+                drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.35f), color.copy(alpha = 0f))))
+                drawPath(line, color, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
-            val line = Path().apply {
-                points.forEachIndexed { i, v -> if (i == 0) moveTo(x(i), y(v)) else lineTo(x(i), y(v)) }
-            }
-            val baseY = y(max(lo, 0.0).coerceAtMost(hi))
-            val fill = Path().apply {
-                addPath(line)
-                lineTo(x(points.lastIndex), baseY)
-                lineTo(x(0), baseY)
-                close()
-            }
-            drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.35f), color.copy(alpha = 0f))))
-            drawPath(line, color, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
     }
 }

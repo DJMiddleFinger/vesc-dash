@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.VectorPainter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalDensity
@@ -333,7 +334,19 @@ internal fun TapTarget(rect: Rect, enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun HomeButton(visible: Boolean, center: Offset, diameter: Float, c: RidePalette, onClick: () -> Unit) {
+internal fun HomeButton(visible: Boolean, center: Offset, diameter: Float, c: RidePalette, onClick: () -> Unit) =
+    RideRoundButton(visible, center, diameter, c, Icons.Filled.Home, "Back to app", onClick)
+
+@Composable
+internal fun RideRoundButton(
+    visible: Boolean,
+    center: Offset,
+    diameter: Float,
+    c: RidePalette,
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+) {
     val density = LocalDensity.current
     AnimatedVisibility(
         visible = visible,
@@ -352,8 +365,8 @@ internal fun HomeButton(visible: Boolean, center: Offset, diameter: Float, c: Ri
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                Icons.Filled.Home,
-                contentDescription = "Back to app",
+                icon,
+                contentDescription = description,
                 tint = c.homeIcon,
                 modifier = Modifier.size(with(density) { (diameter * 0.5f).toDp() }),
             )
@@ -439,6 +452,27 @@ internal fun ridingTimeText(ms: Long, big: SpanStyle, small: SpanStyle): Annotat
         withStyle(big) { append((totalMin % 60).toString().padStart(2, '0')) }
         withStyle(small) { append(" m") }
     }
+}
+
+/**
+ * Mode pill filling [pill]: bolt, number and name, its border showing whether the controller
+ * has confirmed the mode. Sizes follow the pill's height, or a third of its width if narrower.
+ */
+internal fun DrawScope.drawModePill(m: TextMeasurer, icons: RideIcons, c: RidePalette, d: RideData, pill: Rect) {
+    // Sizes are fractions of u, the screen height a pill this shape belongs to (Minimal's is 0.13 of it).
+    val u = minOf(pill.height, pill.width / 3.4f) / 0.13f
+    val radius = CornerRadius(pill.height / 2f)
+    drawRoundRect(c.pill, pill.topLeft, pill.size, radius)
+    drawRoundRect(pillBorderColor(d.modeStatus, c), pill.topLeft, pill.size, radius, style = Stroke(0.005f * u))
+    drawIcon(icons.bolt, Offset(pill.left + pill.width * 0.14f, pill.center.y), 0.075f * u, d.modeColor ?: c.textSoft)
+    drawCentered(m, AnnotatedString(d.modeNumber.toString()), wide(0.085f * u, c.text), Offset(pill.left + pill.width * 0.31f, pill.center.y))
+    val nameLeft = pill.left + pill.width * 0.43f
+    val nameRoom = pill.right - pill.height * 0.35f - nameLeft
+    val name = d.modeName.uppercase()
+    val baseSize = 0.036f * u
+    val measured = m.measure(AnnotatedString(name), wide(baseSize, c.textSoft, 0.05f)).size.width
+    val nameSize = if (measured > nameRoom && measured > 0) baseSize * nameRoom / measured else baseSize
+    drawCentered(m, AnnotatedString(name), wide(nameSize, c.textSoft, 0.05f), Offset(nameLeft, pill.center.y), alignX = 0f)
 }
 
 internal fun DrawScope.drawIcon(p: VectorPainter, center: Offset, size: Float, color: Color) {
@@ -567,7 +601,7 @@ internal fun ImmersiveMode() {
     }
 }
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null

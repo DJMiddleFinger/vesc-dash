@@ -50,6 +50,8 @@ fun WidgetEditorSheet(
     vehicle: VehicleSettings,
     onDismiss: () -> Unit,
     onSave: (DashWidget) -> Unit,
+    /** Half/full width only means something on the Dash tab's grid. */
+    showSize: Boolean = true,
 ) {
     val base = remember {
         initial ?: Metric.SPEED.defaultThresholds().let { th ->
@@ -91,10 +93,12 @@ fun WidgetEditorSheet(
                 }
             }
 
-            SectionLabel("SIZE")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = size == WidgetSize.HALF, onClick = { size = WidgetSize.HALF }, label = { Text("Half width") })
-                FilterChip(selected = size == WidgetSize.FULL, onClick = { size = WidgetSize.FULL }, label = { Text("Full width") })
+            if (showSize) {
+                SectionLabel("SIZE")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = size == WidgetSize.HALF, onClick = { size = WidgetSize.HALF }, label = { Text("Half width") })
+                    FilterChip(selected = size == WidgetSize.FULL, onClick = { size = WidgetSize.FULL }, label = { Text("Full width") })
+                }
             }
 
             SectionLabel("DATA")

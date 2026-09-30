@@ -53,6 +53,7 @@ class VescRepository(
     val modes: StateFlow<List<DriveMode>> = store.modes.stateIn(scope, SharingStarted.Eagerly, Defaults.modes)
     val activeModeId: StateFlow<String?> = store.activeModeId.stateIn(scope, SharingStarted.Eagerly, null)
     val dashboards: StateFlow<List<Dashboard>> = store.dashboards.stateIn(scope, SharingStarted.Eagerly, Defaults.dashboards)
+    val rideLayout: StateFlow<RideLayout> = store.rideLayout.stateIn(scope, SharingStarted.Eagerly, Defaults.rideLayout)
     val lastDevice: StateFlow<String?> = store.lastDevice.stateIn(scope, SharingStarted.Eagerly, null)
 
     private val _telemetry = MutableStateFlow<Telemetry?>(null)
@@ -233,8 +234,7 @@ class VescRepository(
         _telemetry.value = t
         synchronized(historyBuf) {
             historyBuf.addLast(t)
-            val maxSamples = 30 * v.pollHz.coerceIn(1, 30)
-            while (historyBuf.size > maxSamples) historyBuf.removeFirst()
+            while (historyBuf.size > v.historySamples) historyBuf.removeFirst()
             _history.value = historyBuf.toList()
         }
     }
@@ -351,5 +351,9 @@ class VescRepository(
 
     fun updateDashboards(f: (List<Dashboard>) -> List<Dashboard>) {
         scope.launch { store.updateDashboards(f) }
+    }
+
+    fun updateRideLayout(f: (RideLayout) -> RideLayout) {
+        scope.launch { store.updateRideLayout(f) }
     }
 }

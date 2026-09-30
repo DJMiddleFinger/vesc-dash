@@ -41,6 +41,9 @@ data class VehicleSettings(
 ) {
     val controllers: Int get() = if (dualController) 2 else 1
     val nominalVoltage: Double get() = cellsSeries * 3.7
+
+    /** Samples kept for graph widgets: 30 s at the poll rate. */
+    val historySamples: Int get() = 30 * pollHz.coerceIn(1, 30)
 }
 
 @Serializable
@@ -48,6 +51,7 @@ enum class RideStyle(val label: String) {
     CLASSIC("Classic gauge"),
     MINIMAL("Minimal"),
     TILES("Tiles"),
+    CUSTOM("Custom"),
 }
 
 @Serializable
@@ -103,6 +107,28 @@ data class Dashboard(
     val widgets: List<DashWidget>,
 )
 
+/** A rectangle in fractions of the ride screen (0..1, top-left origin) so a layout scales to any phone. */
+@Serializable
+data class RideRect(val x: Float, val y: Float, val w: Float, val h: Float) {
+    val right: Float get() = x + w
+    val bottom: Float get() = y + h
+}
+
+/** One widget placed on the Custom ride screen. The widget's id is the item id; its [DashWidget.size] is ignored. */
+@Serializable
+data class RideItem(val widget: DashWidget, val rect: RideRect)
+
+/**
+ * The Custom ride screen. [items] draw first to last, so the last is on top. The mode pill and
+ * the warning icons are fixed elements: they can be moved and resized but not removed.
+ */
+@Serializable
+data class RideLayout(
+    val items: List<RideItem>,
+    val modePill: RideRect,
+    val warnings: RideRect,
+)
+
 object Defaults {
     val modeColors = listOf(
         0xFF30D158, 0xFF29B6F6, 0xFFFF9100, 0xFFFF1744,
@@ -142,5 +168,24 @@ object Defaults {
                 DashWidget("t-regen", WidgetType.NUMBER, Metric.WH_REGEN),
             ),
         ),
+    )
+
+    /** Speed in the middle, battery and trip readouts along the top, power graph along the bottom. */
+    val rideLayout = RideLayout(
+        items = listOf(
+            RideItem(
+                DashWidget("c-batt", WidgetType.BAR, Metric.BATTERY, warn = 20.0, danger = 10.0),
+                RideRect(0.31f, 0.05f, 0.40f, 0.16f),
+            ),
+            RideItem(DashWidget("c-speed", WidgetType.NUMBER, Metric.SPEED), RideRect(0.26f, 0.24f, 0.48f, 0.49f)),
+            RideItem(DashWidget("c-trip", WidgetType.NUMBER, Metric.TRIP), RideRect(0.78f, 0.05f, 0.19f, 0.19f)),
+            RideItem(
+                DashWidget("c-tmot", WidgetType.NUMBER, Metric.TEMP_MOTOR, warn = 80.0, danger = 100.0),
+                RideRect(0.78f, 0.26f, 0.19f, 0.19f),
+            ),
+            RideItem(DashWidget("c-power", WidgetType.GRAPH, Metric.POWER), RideRect(0.035f, 0.75f, 0.93f, 0.21f)),
+        ),
+        modePill = RideRect(0.035f, 0.05f, 0.24f, 0.13f),
+        warnings = RideRect(0.035f, 0.24f, 0.19f, 0.45f),
     )
 }

@@ -13,17 +13,19 @@ import kotlinx.serialization.json.Json
 
 private val Context.dataStore by preferencesDataStore("vescdash")
 
-class SettingsStore(private val context: Context) {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-        coerceInputValues = true
-    }
+/** How everything is stored; shared so tests can round-trip models the same way. */
+internal val settingsJson = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+    coerceInputValues = true
+}
 
+class SettingsStore(private val context: Context) {
     private object Keys {
         val VEHICLE = stringPreferencesKey("vehicle")
         val MODES = stringPreferencesKey("modes")
         val DASHBOARDS = stringPreferencesKey("dashboards")
+        val RIDE_LAYOUT = stringPreferencesKey("ride_layout")
         val ACTIVE_MODE = stringPreferencesKey("active_mode")
         val LAST_DEVICE = stringPreferencesKey("last_device")
     }
@@ -31,19 +33,24 @@ class SettingsStore(private val context: Context) {
     val vehicle: Flow<VehicleSettings> = context.dataStore.data.map { readVehicle(it) }
     val modes: Flow<List<DriveMode>> = context.dataStore.data.map { readModes(it) }
     val dashboards: Flow<List<Dashboard>> = context.dataStore.data.map { readDashboards(it) }
+    val rideLayout: Flow<RideLayout> = context.dataStore.data.map { readRideLayout(it) }
     val activeModeId: Flow<String?> = context.dataStore.data.map { it[Keys.ACTIVE_MODE] }
     val lastDevice: Flow<String?> = context.dataStore.data.map { it[Keys.LAST_DEVICE] }
 
     suspend fun updateVehicle(f: (VehicleSettings) -> VehicleSettings) {
-        context.dataStore.edit { it[Keys.VEHICLE] = json.encodeToString(f(readVehicle(it))) }
+        context.dataStore.edit { it[Keys.VEHICLE] = settingsJson.encodeToString(f(readVehicle(it))) }
     }
 
     suspend fun updateModes(f: (List<DriveMode>) -> List<DriveMode>) {
-        context.dataStore.edit { it[Keys.MODES] = json.encodeToString(f(readModes(it))) }
+        context.dataStore.edit { it[Keys.MODES] = settingsJson.encodeToString(f(readModes(it))) }
     }
 
     suspend fun updateDashboards(f: (List<Dashboard>) -> List<Dashboard>) {
-        context.dataStore.edit { it[Keys.DASHBOARDS] = json.encodeToString(f(readDashboards(it))) }
+        context.dataStore.edit { it[Keys.DASHBOARDS] = settingsJson.encodeToString(f(readDashboards(it))) }
+    }
+
+    suspend fun updateRideLayout(f: (RideLayout) -> RideLayout) {
+        context.dataStore.edit { it[Keys.RIDE_LAYOUT] = settingsJson.encodeToString(f(readRideLayout(it))) }
     }
 
     suspend fun setActiveMode(id: String) {
@@ -55,14 +62,18 @@ class SettingsStore(private val context: Context) {
     }
 
     private fun readVehicle(p: Preferences): VehicleSettings =
-        p[Keys.VEHICLE]?.let { s -> runCatching { json.decodeFromString<VehicleSettings>(s) }.getOrNull() }
+        p[Keys.VEHICLE]?.let { s -> runCatching { settingsJson.decodeFromString<VehicleSettings>(s) }.getOrNull() }
             ?: VehicleSettings()
 
     private fun readModes(p: Preferences): List<DriveMode> =
-        p[Keys.MODES]?.let { s -> runCatching { json.decodeFromString<List<DriveMode>>(s) }.getOrNull() }
+        p[Keys.MODES]?.let { s -> runCatching { settingsJson.decodeFromString<List<DriveMode>>(s) }.getOrNull() }
             ?.takeIf { it.isNotEmpty() } ?: Defaults.modes
 
     private fun readDashboards(p: Preferences): List<Dashboard> =
-        p[Keys.DASHBOARDS]?.let { s -> runCatching { json.decodeFromString<List<Dashboard>>(s) }.getOrNull() }
+        p[Keys.DASHBOARDS]?.let { s -> runCatching { settingsJson.decodeFromString<List<Dashboard>>(s) }.getOrNull() }
             ?.takeIf { it.isNotEmpty() } ?: Defaults.dashboards
+
+    private fun readRideLayout(p: Preferences): RideLayout =
+        p[Keys.RIDE_LAYOUT]?.let { s -> runCatching { settingsJson.decodeFromString<RideLayout>(s) }.getOrNull() }
+            ?: Defaults.rideLayout
 }

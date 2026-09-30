@@ -4,10 +4,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import com.vescdash.R
 
 object Palette {
@@ -28,6 +31,39 @@ val WideFont = FontFamily(Font(R.font.michroma))
 
 /** Tabular figures so numbers don't jitter as they change. */
 val NumberStyle = TextStyle(fontFeatureSettings = "tnum")
+
+/**
+ * What dashboard widgets draw with. The Dash tab uses [Dash], the app palette at fixed sizes;
+ * the ride screen provides its own colours and face, and sizes text from each widget's box.
+ */
+class WidgetTheme(
+    val surface: Color,
+    val fg: Color,
+    val dim: Color,
+    val outline: Color,
+    val warn: Color,
+    val danger: Color,
+    val number: TextStyle,
+    val label: TextStyle,
+    /** Text and padding grow with the widget's box instead of using the Dash tab's fixed sizes. */
+    val scaleToBox: Boolean,
+) {
+    /** [dash] on the Dash tab; on the ride screen [frac] of [ref] (a length from the widget), kept within [min]..[max]. */
+    fun scale(dash: Float, ref: Float, frac: Float, min: Float = 0f, max: Float = Float.MAX_VALUE): Float =
+        if (scaleToBox) (ref * frac).coerceIn(min, max) else dash
+
+    /** Label size: 11 sp on the Dash tab; on the ride screen [frac] of [ref], but always a small caption. */
+    fun labelSize(ref: Float, frac: Float): Float = scale(11f, ref, frac, min = 9f, max = 13f)
+
+    companion object {
+        val Dash = WidgetTheme(
+            Palette.Surface, Palette.Fg, Palette.TextDim, Palette.Outline, Palette.Warn, Palette.Danger,
+            NumberStyle, TextStyle(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp), scaleToBox = false,
+        )
+    }
+}
+
+val LocalWidgetTheme = staticCompositionLocalOf { WidgetTheme.Dash }
 
 @Composable
 fun VescDashTheme(accent: Color, content: @Composable () -> Unit) {

@@ -2,6 +2,8 @@ package com.vescdash.ui.setup
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +38,7 @@ import com.vescdash.ui.ride.MOTOR_RED_C
 import com.vescdash.ui.theme.Palette
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SetupScreen(vm: MainViewModel) {
     val v by vm.vehicle.collectAsStateWithLifecycle()
@@ -87,7 +90,7 @@ fun SetupScreen(vm: MainViewModel) {
         Card(title = "RIDE VIEW  ·  LANDSCAPE") {
             Text("Turn the phone sideways to show it.", color = Palette.TextDim, fontSize = 12.sp)
             Text("Style", color = Palette.Fg, fontSize = 15.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RideStyle.entries.forEach { style ->
                     FilterChip(
                         selected = v.rideStyle == style,
@@ -95,6 +98,14 @@ fun SetupScreen(vm: MainViewModel) {
                         label = { Text(style.label) },
                     )
                 }
+            }
+            if (v.rideStyle == RideStyle.CUSTOM) {
+                Text(
+                    "Drag widgets anywhere and pinch to resize them. You can also edit from the ride view while stopped.",
+                    color = Palette.TextDim,
+                    fontSize = 12.sp,
+                )
+                OutlinedButton(onClick = vm::openLayoutEditor, modifier = Modifier.fillMaxWidth()) { Text("Edit custom layout") }
             }
             Text("Theme", color = Palette.Fg, fontSize = 15.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

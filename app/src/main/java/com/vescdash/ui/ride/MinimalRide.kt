@@ -59,19 +59,7 @@ internal fun MinimalRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
                     translationY = -(1f - topIn) * 0.12f * h
                 },
         ) {
-            // Mode pill: bolt, number, name
-            val radius = CornerRadius(pill.height / 2f)
-            drawRoundRect(c.pill, pill.topLeft, pill.size, radius)
-            drawRoundRect(pillBorderColor(d.modeStatus, c), pill.topLeft, pill.size, radius, style = Stroke(0.005f * h))
-            drawIcon(icons.bolt, Offset(pill.left + pill.width * 0.14f, pill.center.y), 0.075f * h, d.modeColor ?: c.textSoft)
-            drawCentered(measurer, AnnotatedString(d.modeNumber.toString()), wide(0.085f * h, c.text), Offset(pill.left + pill.width * 0.31f, pill.center.y))
-            val nameLeft = pill.left + pill.width * 0.43f
-            val nameRoom = pill.right - pill.height * 0.35f - nameLeft
-            val name = d.modeName.uppercase()
-            val baseSize = 0.036f * h
-            val measured = measurer.measure(AnnotatedString(name), wide(baseSize, c.textSoft, 0.05f)).size.width
-            val nameSize = if (measured > nameRoom && measured > 0) baseSize * nameRoom / measured else baseSize
-            drawCentered(measurer, AnnotatedString(name), wide(nameSize, c.textSoft, 0.05f), Offset(nameLeft, pill.center.y), alignX = 0f)
+            drawModePill(measurer, icons, c, d, pill)
 
             // Battery: outlined cell with fill, then the percentage
             val pctText = buildAnnotatedString {

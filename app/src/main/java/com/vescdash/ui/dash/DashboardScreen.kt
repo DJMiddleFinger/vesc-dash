@@ -215,7 +215,6 @@ private fun DashboardPage(
     onDeletePage: () -> Unit,
 ) {
     val columns = if (LocalConfiguration.current.screenWidthDp >= 600) 4 else 2
-    val capacity = 30 * vehicle.pollHz.coerceIn(1, 30)
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         modifier = modifier.fillMaxSize(),
@@ -233,7 +232,7 @@ private fun DashboardPage(
                 widget = w,
                 telemetry = telemetry,
                 history = history,
-                historyCapacity = capacity,
+                historyCapacity = vehicle.historySamples,
                 vehicle = vehicle,
                 editing = editing,
                 onEdit = { onEditWidget(w) },

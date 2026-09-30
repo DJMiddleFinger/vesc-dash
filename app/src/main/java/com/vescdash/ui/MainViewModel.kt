@@ -9,6 +9,7 @@ import com.vescdash.data.DashWidget
 import com.vescdash.data.Dashboard
 import com.vescdash.data.Defaults
 import com.vescdash.data.DriveMode
+import com.vescdash.data.RideLayout
 import com.vescdash.data.VehicleSettings
 import com.vescdash.data.WidgetSize
 import kotlinx.coroutines.CancellationException
@@ -34,6 +35,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val modes = repo.modes
     val activeModeId = repo.activeModeId
     val dashboards = repo.dashboards
+    val rideLayout = repo.rideLayout
     val lastDevice = repo.lastDevice
     val demoActive = repo.demoActive
     val rideTimeMs = repo.rideTimeMs
@@ -150,4 +152,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteDashboard(id: String) = repo.updateDashboards { list ->
         if (list.size <= 1) list else list.filterNot { it.id == id }
     }
+
+    // ---- custom ride layout -----------------------------------------------
+
+    private val _layoutEditorOpen = MutableStateFlow(false)
+    /** The Custom ride-layout editor is showing, full-screen above everything else. */
+    val layoutEditorOpen: StateFlow<Boolean> = _layoutEditorOpen.asStateFlow()
+
+    fun openLayoutEditor() {
+        _layoutEditorOpen.value = true
+    }
+
+    fun closeLayoutEditor() {
+        _layoutEditorOpen.value = false
+    }
+
+    fun saveRideLayout(layout: RideLayout) = repo.updateRideLayout { layout }
 }

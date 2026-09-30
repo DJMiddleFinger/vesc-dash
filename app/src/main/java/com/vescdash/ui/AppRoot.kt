@@ -60,6 +60,7 @@ import com.vescdash.data.VehicleMath
 import com.vescdash.ui.connect.ConnectSheet
 import com.vescdash.ui.dash.DashboardScreen
 import com.vescdash.ui.modes.ModesScreen
+import com.vescdash.ui.ride.RideLayoutEditor
 import com.vescdash.ui.ride.RideScreen
 import com.vescdash.ui.setup.SetupScreen
 import com.vescdash.ui.theme.Palette
@@ -84,6 +85,7 @@ fun AppRoot(vm: MainViewModel) {
     val reconnecting by vm.reconnecting.collectAsStateWithLifecycle()
     val firmware by vm.firmware.collectAsStateWithLifecycle()
     val demoActive by vm.demoActive.collectAsStateWithLifecycle()
+    val layoutEditorOpen by vm.layoutEditorOpen.collectAsStateWithLifecycle()
     val telemetryState = vm.telemetry.collectAsStateWithLifecycle()
 
     val activeMode = modes.firstOrNull { it.id == activeId } ?: modes.firstOrNull()
@@ -124,6 +126,12 @@ fun AppRoot(vm: MainViewModel) {
 
     val showRide = landscape && !homeInLandscape
 
+    // The editor turns the phone landscape. Opened from the normal app, stay on it when the editor
+    // closes rather than flashing the ride view while the phone turns back to portrait.
+    LaunchedEffect(layoutEditorOpen) {
+        if (layoutEditorOpen && !showRide) homeInLandscape = true
+    }
+
     VescDashTheme(accent) {
         // Entering the ride view zooms in from slightly larger; leaving shrinks it back out.
         AnimatedContent(
@@ -141,7 +149,9 @@ fun AppRoot(vm: MainViewModel) {
             label = "rideView",
         ) { ride ->
             if (ride) {
-                RideScreen(vm, onHome = { homeInLandscape = true })
+                // The editor covers the ride view, so leave it out meanwhile: it re-enters afterwards
+                // and hides the system bars again, which the editor's own exit would have shown.
+                if (!layoutEditorOpen) RideScreen(vm, onHome = { homeInLandscape = true })
             } else {
                 Scaffold(
                     containerColor = Palette.Bg,
@@ -226,5 +236,6 @@ fun AppRoot(vm: MainViewModel) {
             }
         }
         if (showConnect && !showRide) ConnectSheet(vm, onDismiss = { showConnect = false })
+        if (layoutEditorOpen) RideLayoutEditor(vm)
     }
 }
