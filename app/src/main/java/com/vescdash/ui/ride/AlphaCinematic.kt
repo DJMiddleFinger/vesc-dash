@@ -279,6 +279,13 @@ internal fun playAlphaHaptics(context: Context) {
     runCatching { vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1)) }
 }
 
+/** One short, light tick as a launch kicks in. */
+internal fun playLaunchHaptic(context: Context) {
+    val vibrator = vibrator(context) ?: return
+    if (!vibrator.hasVibrator()) return
+    runCatching { vibrator.vibrate(VibrationEffect.createOneShot(28, 90)) }
+}
+
 private fun vibrator(context: Context): Vibrator? =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         context.getSystemService(VibratorManager::class.java)?.defaultVibrator

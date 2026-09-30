@@ -22,14 +22,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -49,7 +49,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vescdash.ble.VescBleTransport
 import com.vescdash.ui.MainViewModel
+import com.vescdash.ui.common.AppButton
 import com.vescdash.ui.common.SectionLabel
+import com.vescdash.ui.common.StarkRing
+import com.vescdash.ui.common.caps
 import com.vescdash.ui.theme.Palette
 
 private fun blePermissions(): Array<String> =
@@ -100,76 +103,115 @@ fun ConnectSheet(vm: MainViewModel, onDismiss: () -> Unit) {
     }
     DisposableEffect(Unit) { onDispose { vm.stopScan() } }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Palette.Surface) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Connect to VESC", color = Palette.Fg, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                if (scanning) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = accent)
-                } else {
-                    TextButton(onClick = { scan() }) { Text("Scan") }
+    val stark = Palette.stark
+
+    val header: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Connect to VESC".caps(),
+                color = Palette.Fg,
+                fontSize = if (stark) 15.sp else 22.sp,
+                fontFamily = Palette.display,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            if (scanning) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = accent)
+            } else {
+                TextButton(onClick = { scan() }) { Text("Scan") }
+            }
+        }
+    }
+
+    val status: @Composable () -> Unit = {
+        when (val c = connection) {
+            is VescBleTransport.State.Connected -> {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(Palette.innerShape)
+                        .background(Palette.Surface2)
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(c.name ?: "VESC", color = Palette.Fg, fontWeight = FontWeight.Bold)
+                        Text(c.address, color = Palette.TextDim, fontSize = 12.sp)
+                    }
+                    AppButton("Disconnect", onClick = { vm.disconnect() })
                 }
             }
+            is VescBleTransport.State.Connecting -> Text("Connecting to ${c.address}…", color = Palette.Warn)
+            is VescBleTransport.State.Failed -> Text(c.reason, color = Palette.Danger, fontSize = 13.sp)
+            VescBleTransport.State.Idle -> Unit
+        }
 
-            when (val c = connection) {
-                is VescBleTransport.State.Connected -> {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Palette.Surface2)
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(c.name ?: "VESC", color = Palette.Fg, fontWeight = FontWeight.Bold)
-                            Text(c.address, color = Palette.TextDim, fontSize = 12.sp)
-                        }
-                        OutlinedButton(onClick = { vm.disconnect() }) { Text("Disconnect") }
+        if (!granted) {
+            Text("Bluetooth permission is needed to find your VESC.", color = Palette.TextDim)
+            AppButton("Grant permission", onClick = { requestPerms.launch(permissions) }, primary = true)
+        } else if (!btOn) {
+            Text("Bluetooth is off.", color = Palette.TextDim)
+            AppButton("Turn on Bluetooth", onClick = { enableBt.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }, primary = true)
+        }
+        scanError?.let { Text(it, color = Palette.Warn, fontSize = 13.sp) }
+
+        val last = lastDevice
+        if (last != null && connection !is VescBleTransport.State.Connected && results.none { it.address == last }) {
+            AppButton("Reconnect to last device ($last)", onClick = { vm.connect(last); onDismiss() }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+
+    val devices: @Composable () -> Unit = {
+        SectionLabel("NEARBY DEVICES")
+        LazyColumn(Modifier.heightIn(max = if (stark) 240.dp else 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(results, key = { it.address }) { d ->
+                DeviceRow(d, isLast = d.address == lastDevice, accent = accent) {
+                    vm.connect(d.address)
+                    onDismiss()
+                }
+            }
+            if (results.isEmpty() && !scanning && granted && btOn) {
+                item {
+                    Text(
+                        "No devices found. Make sure the VESC is powered and not connected to VESC Tool or another phone." +
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) " Location services must be on to scan on this Android version." else "",
+                        color = Palette.TextDim,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = stark),
+        containerColor = Palette.Surface,
+        // Stark is always landscape, so let the sheet use the width for its two columns.
+        sheetMaxWidth = if (stark) 900.dp else BottomSheetDefaults.SheetMaxWidth,
+    ) {
+        if (stark) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StarkRing(connected = connection is VescBleTransport.State.Connected, busy = scanning || connection is VescBleTransport.State.Connecting)
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        header()
+                        status()
                     }
                 }
-                is VescBleTransport.State.Connecting -> Text("Connecting to ${c.address}…", color = Palette.Warn)
-                is VescBleTransport.State.Failed -> Text(c.reason, color = Palette.Danger, fontSize = 13.sp)
-                VescBleTransport.State.Idle -> Unit
+                Column(Modifier.weight(1.3f), verticalArrangement = Arrangement.spacedBy(12.dp)) { devices() }
             }
-
-            if (!granted) {
-                Text("Bluetooth permission is needed to find your VESC.", color = Palette.TextDim)
-                Button(onClick = { requestPerms.launch(permissions) }) { Text("Grant permission") }
-            } else if (!btOn) {
-                Text("Bluetooth is off.", color = Palette.TextDim)
-                Button(onClick = { enableBt.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }) { Text("Turn on Bluetooth") }
-            }
-            scanError?.let { Text(it, color = Palette.Warn, fontSize = 13.sp) }
-
-            val last = lastDevice
-            if (last != null && connection !is VescBleTransport.State.Connected && results.none { it.address == last }) {
-                OutlinedButton(onClick = { vm.connect(last); onDismiss() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Reconnect to last device ($last)")
-                }
-            }
-
-            SectionLabel("NEARBY DEVICES")
-            LazyColumn(Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(results, key = { it.address }) { d ->
-                    DeviceRow(d, isLast = d.address == lastDevice, accent = accent) {
-                        vm.connect(d.address)
-                        onDismiss()
-                    }
-                }
-                if (results.isEmpty() && !scanning && granted && btOn) {
-                    item {
-                        Text(
-                            "No devices found. Make sure the VESC is powered and not connected to VESC Tool or another phone." +
-                                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) " Location services must be on to scan on this Android version." else "",
-                            color = Palette.TextDim,
-                            fontSize = 13.sp,
-                        )
-                    }
-                }
+        } else {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                header()
+                status()
+                devices()
             }
         }
     }
@@ -180,7 +222,7 @@ private fun DeviceRow(d: VescBleTransport.Device, isLast: Boolean, accent: Color
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(Palette.innerShape)
             .background(Palette.Surface2)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),

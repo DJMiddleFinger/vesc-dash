@@ -29,8 +29,11 @@ data class VehicleSettings(
     val keepScreenOn: Boolean = true,
     val applyModeOnConnect: Boolean = true,
     val demoMode: Boolean = false,
+    val appearance: AppAppearance = AppAppearance.CLASSIC,
     val rideStyle: RideStyle = RideStyle.CLASSIC,
     val rideTheme: RideTheme = RideTheme.DARK,
+    /** Speed streaks, an edge glow and a screen push on the ride view when accelerating hard. */
+    val launchAnimation: Boolean = false,
     /** Compensate voltage sag so battery % doesn't jump around under load. */
     val batteryStabilize: Boolean = true,
     /** Pack capacity in Ah; 0 = unknown. When set, battery % uses charge counting. */
@@ -44,6 +47,13 @@ data class VehicleSettings(
 
     /** Samples kept for graph widgets: 30 s at the poll rate. */
     val historySamples: Int get() = 30 * pollHz.coerceIn(1, 30)
+}
+
+/** How the whole app looks. Stark Varg is a landscape-only, unofficial lookalike of the Stark Varg phone app. */
+@Serializable
+enum class AppAppearance(val label: String) {
+    CLASSIC("Classic"),
+    STARK("Stark Varg"),
 }
 
 @Serializable

@@ -47,7 +47,9 @@ fun PowerCurveChart(
     val speedFactor = if (vehicle.imperial) KMH_TO_MPH else 1.0
     val unit = speedUnit(vehicle)
     val measurer = rememberTextMeasurer()
-    val labelStyle = TextStyle(color = Palette.TextDim, fontSize = 10.sp, fontFeatureSettings = "tnum")
+    val outline = Palette.Outline
+    val dim = Palette.TextDim
+    val labelStyle = TextStyle(color = dim, fontSize = 10.sp, fontFeatureSettings = "tnum")
 
     Canvas(modifier) {
         val left = if (detailed) 30.dp.toPx() else 0f
@@ -63,7 +65,7 @@ fun PowerCurveChart(
             var k = 0.0
             while (k <= yMax + 1e-9) {
                 val y = py(k)
-                drawLine(Palette.Outline, Offset(left, y), Offset(size.width, y), strokeWidth = 1f)
+                drawLine(outline, Offset(left, y), Offset(size.width, y), strokeWidth = 1f)
                 val text = if (step < 1) String.format(java.util.Locale.US, "%.1f", k) else k.roundToInt().toString()
                 val layout = measurer.measure(text, labelStyle)
                 drawText(layout, topLeft = Offset(left - layout.size.width - 6.dp.toPx(), y - layout.size.height / 2f))
@@ -89,7 +91,7 @@ fun PowerCurveChart(
 
         drawPath(
             pathOf(fullCurve),
-            Palette.TextDim.copy(alpha = 0.55f),
+            dim.copy(alpha = 0.55f),
             style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f))),
         )
         val line = pathOf(curve)

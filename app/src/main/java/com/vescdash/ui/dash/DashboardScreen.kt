@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -33,7 +34,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,8 +64,13 @@ import com.vescdash.data.Telemetry
 import com.vescdash.data.VehicleSettings
 import com.vescdash.data.WidgetSize
 import com.vescdash.ui.MainViewModel
+import com.vescdash.ui.common.AppButton
 import com.vescdash.ui.common.Banner
+import com.vescdash.ui.common.appTextFieldColors
+import com.vescdash.ui.common.starkUnderline
+import com.vescdash.ui.theme.HeavyWideFont
 import com.vescdash.ui.theme.Palette
+import com.vescdash.ui.theme.WideFont
 import com.vescdash.vesc.VescProtocol
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
@@ -120,10 +125,12 @@ fun DashboardScreen(vm: MainViewModel, onConnectClick: () -> Unit) {
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { scope.launch { pager.animateScrollToPage(i) } }
-                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                            .then(if (Palette.stark) Modifier.starkUnderline(selected) else Modifier)
+                            .padding(horizontal = 10.dp, vertical = if (Palette.stark) 7.dp else 10.dp),
                         color = tabColor,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                         fontSize = 13.sp,
+                        fontFamily = Palette.display,
                         letterSpacing = 1.2.sp,
                     )
                 }
@@ -214,7 +221,13 @@ private fun DashboardPage(
     onAddPage: () -> Unit,
     onDeletePage: () -> Unit,
 ) {
-    val columns = if (LocalConfiguration.current.screenWidthDp >= 600) 4 else 2
+    val width = LocalConfiguration.current.screenWidthDp
+    val stark = Palette.stark
+    val columns = when {
+        stark -> (width / 190).coerceIn(3, 6)
+        width >= 600 -> 4
+        else -> 2
+    }
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         modifier = modifier.fillMaxSize(),
@@ -225,7 +238,8 @@ private fun DashboardPage(
         items(
             dash.widgets,
             key = { it.id },
-            span = { GridItemSpan(if (it.size == WidgetSize.FULL) maxLineSpan else 1) },
+            // Stark's landscape grid is wide, so a full-width widget takes two columns rather than the whole line.
+            span = { GridItemSpan(if (it.size != WidgetSize.FULL) 1 else if (stark) 2 else maxLineSpan) },
         ) { w ->
             WidgetCard(
                 modifier = Modifier.animateItem(),
@@ -249,14 +263,11 @@ private fun DashboardPage(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    OutlinedButton(onClick = { onEditWidget(null) }) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Text(" Widget")
-                    }
-                    OutlinedButton(onClick = onRename) { Text("Rename page") }
-                    OutlinedButton(onClick = onAddPage) { Text("New page") }
+                    AppButton("Widget", onClick = { onEditWidget(null) }, icon = Icons.Filled.Add)
+                    AppButton("Rename page", onClick = onRename)
+                    AppButton("New page", onClick = onAddPage)
                     if (canDeletePage) {
-                        OutlinedButton(onClick = onDeletePage) { Text("Delete page", color = Palette.Danger) }
+                        AppButton("Delete page", onClick = onDeletePage, color = Palette.Danger)
                     }
                 }
             }
@@ -281,6 +292,10 @@ fun ModeStrip(
     connected: Boolean,
     onSelect: (String) -> Unit,
 ) {
+    if (Palette.stark) {
+        StarkModeStrip(modes, activeId, status, connected, onSelect)
+        return
+    }
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -321,16 +336,60 @@ fun ModeStrip(
                 }
             }
         }
-        val (text, color) = when {
-            !connected -> "Mode applies when connected" to Palette.TextDim
-            status is ModeApplyStatus.Applying -> "Sending mode to controller…" to Palette.Warn
-            status is ModeApplyStatus.Failed -> "⚠ Controller didn't confirm — tap the mode to retry" to Palette.Danger
-            status is ModeApplyStatus.Applied && status.modeId == activeId -> "✓ Active on controller" to Palette.Good
-            else -> "" to Palette.TextDim
-        }
+        val (text, color) = modeStatusText(status, connected, activeId)
         if (text.isNotEmpty()) {
             Text(text, color = color, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp, start = 2.dp))
         }
+    }
+}
+
+@Composable
+private fun modeStatusText(status: ModeApplyStatus, connected: Boolean, activeId: String?): Pair<String, Color> = when {
+    !connected -> "Mode applies when connected" to Palette.TextDim
+    status is ModeApplyStatus.Applying -> "Sending mode to controller…" to Palette.Warn
+    status is ModeApplyStatus.Failed -> "⚠ Controller didn't confirm — tap the mode to retry" to Palette.Danger
+    status is ModeApplyStatus.Applied && status.modeId == activeId -> "✓ Active on controller" to Palette.Good
+    else -> "" to Palette.TextDim
+}
+
+/** Landscape mode strip: stadium chips like the power-mode editor's, with the apply status on the same row. */
+@Composable
+private fun StarkModeStrip(
+    modes: List<DriveMode>,
+    activeId: String?,
+    status: ModeApplyStatus,
+    connected: Boolean,
+    onSelect: (String) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            modes.forEachIndexed { i, m ->
+                val selected = m.id == activeId
+                val c = Color(m.color)
+                Row(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(if (selected) Palette.Surface2 else Color(0xFF151515))
+                        .border(1.dp, if (selected) c else Color(0xFF3A3A3A), CircleShape)
+                        .clickable { onSelect(m.id) }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("${i + 1}", color = c, fontFamily = HeavyWideFont, fontSize = 14.sp)
+                    Text(
+                        m.name.uppercase(),
+                        modifier = Modifier.padding(start = 8.dp),
+                        color = if (selected) Palette.Fg else Palette.TextDim,
+                        fontFamily = WideFont,
+                        fontSize = 10.sp,
+                        letterSpacing = 1.sp,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+        val (text, color) = modeStatusText(status, connected, activeId)
+        if (text.isNotEmpty()) Text(text, color = color, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(start = 12.dp))
     }
 }
 
@@ -339,9 +398,9 @@ private fun RenameDialog(initial: String, onDismiss: () -> Unit, onConfirm: (Str
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Palette.Surface2,
+        containerColor = Palette.Dialog,
         title = { Text("Page name") },
-        text = { OutlinedTextField(text, { text = it.take(16) }, singleLine = true) },
+        text = { OutlinedTextField(text, { text = it.take(16) }, singleLine = true, colors = appTextFieldColors()) },
         confirmButton = { TextButton(onClick = { onConfirm(text.trim().ifBlank { initial }) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

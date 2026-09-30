@@ -1,5 +1,6 @@
 package com.vescdash.ui
 
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -14,6 +15,12 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,12 +63,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vescdash.ble.VescBleTransport
+import com.vescdash.data.AppAppearance
 import com.vescdash.data.VehicleMath
 import com.vescdash.ui.connect.ConnectSheet
 import com.vescdash.ui.dash.DashboardScreen
 import com.vescdash.ui.modes.ModesScreen
 import com.vescdash.ui.ride.RideLayoutEditor
 import com.vescdash.ui.ride.RideScreen
+import com.vescdash.ui.ride.findActivity
 import com.vescdash.ui.setup.SetupScreen
 import com.vescdash.ui.theme.Palette
 import com.vescdash.ui.theme.VescDashTheme
@@ -93,6 +102,8 @@ fun AppRoot(vm: MainViewModel) {
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showConnect by remember { mutableStateOf(false) }
+    val appearance = vehicle.appearance
+    val stark = appearance == AppAppearance.STARK
 
     val connected = connection is VescBleTransport.State.Connected
 
@@ -100,6 +111,9 @@ fun AppRoot(vm: MainViewModel) {
     // riding off (> 5 km/h) or rotating to portrait brings the ride view back.
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var homeInLandscape by rememberSaveable { mutableStateOf(false) }
+    // Stark can't use the phone's orientation to tell a ride from the app (it is always landscape):
+    // the ride view opens on riding off or from the RIDE button, and the home button closes it.
+    var rideOpen by rememberSaveable { mutableStateOf(false) }
     val movingFast by remember {
         derivedStateOf {
             telemetryState.value?.let { abs(VehicleMath.speedKmhForErpm(it.erpm, vm.vehicle.value)) > 5.0 } == true
@@ -108,7 +122,17 @@ fun AppRoot(vm: MainViewModel) {
     LaunchedEffect(movingFast, landscape) {
         if (movingFast || !landscape) homeInLandscape = false
     }
+    // Don't carry an open ride view over from one appearance to the other.
+    LaunchedEffect(appearance) { rideOpen = false }
+    LaunchedEffect(movingFast) {
+        if (movingFast) rideOpen = true
+    }
     val view = LocalView.current
+    DisposableEffect(appearance) {
+        val activity = view.context.findActivity()
+        activity?.requestedOrientation = orientationFor(appearance)
+        onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+    }
     DisposableEffect(vehicle.keepScreenOn, connected) {
         view.keepScreenOn = vehicle.keepScreenOn && connected
         onDispose { view.keepScreenOn = false }
@@ -124,7 +148,7 @@ fun AppRoot(vm: MainViewModel) {
         else -> Palette.TextDim to "Connect"
     }
 
-    val showRide = landscape && !homeInLandscape
+    val showRide = showRideView(appearance, landscape, homeInLandscape, rideOpen)
 
     // The editor turns the phone landscape. Opened from the normal app, stay on it when the editor
     // closes rather than flashing the ride view while the phone turns back to portrait.
@@ -132,7 +156,7 @@ fun AppRoot(vm: MainViewModel) {
         if (layoutEditorOpen && !showRide) homeInLandscape = true
     }
 
-    VescDashTheme(accent) {
+    VescDashTheme(accent, appearance) {
         // Entering the ride view zooms in from slightly larger; leaving shrinks it back out.
         AnimatedContent(
             targetState = showRide,
@@ -151,7 +175,22 @@ fun AppRoot(vm: MainViewModel) {
             if (ride) {
                 // The editor covers the ride view, so leave it out meanwhile: it re-enters afterwards
                 // and hides the system bars again, which the editor's own exit would have shown.
-                if (!layoutEditorOpen) RideScreen(vm, onHome = { homeInLandscape = true })
+                if (!layoutEditorOpen) RideScreen(vm, onHome = { homeInLandscape = true; rideOpen = false })
+            } else if (stark) {
+                Row(Modifier.fillMaxSize().background(Palette.Bg)) {
+                    StarkRail(
+                        selected = tab,
+                        onSelect = { tab = it },
+                        statusColor = dotColor,
+                        statusText = statusText,
+                        onRide = { homeInLandscape = false; rideOpen = true },
+                        onConnect = { showConnect = true },
+                    )
+                    TabContent(
+                        tab, vm,
+                        Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Bottom + WindowInsetsSides.End)),
+                    ) { showConnect = true }
+                }
             } else {
                 Scaffold(
                     containerColor = Palette.Bg,
@@ -173,7 +212,7 @@ fun AppRoot(vm: MainViewModel) {
                                         .padding(end = 10.dp)
                                         .clip(CircleShape)
                                         .background(accent)
-                                        .clickable { homeInLandscape = false }
+                                        .clickable { homeInLandscape = false; rideOpen = true }
                                         .padding(horizontal = 14.dp, vertical = 7.dp),
                                     color = Color.Black,
                                     fontSize = 13.sp,
@@ -216,26 +255,31 @@ fun AppRoot(vm: MainViewModel) {
                         }
                     },
                 ) { padding ->
-                    AnimatedContent(
-                        targetState = tab,
-                        modifier = Modifier.fillMaxSize().padding(padding),
-                        transitionSpec = {
-                            val dir = if (targetState > initialState) 1 else -1
-                            (slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { w -> dir * w / 5 } + fadeIn(tween(260))) togetherWith
-                                (slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { w -> -dir * w / 5 } + fadeOut(tween(180)))
-                        },
-                        label = "tabs",
-                    ) { t ->
-                        when (t) {
-                            0 -> DashboardScreen(vm, onConnectClick = { showConnect = true })
-                            1 -> ModesScreen(vm)
-                            else -> SetupScreen(vm)
-                        }
-                    }
+                    TabContent(tab, vm, Modifier.fillMaxSize().padding(padding)) { showConnect = true }
                 }
             }
         }
         if (showConnect && !showRide) ConnectSheet(vm, onDismiss = { showConnect = false })
         if (layoutEditorOpen) RideLayoutEditor(vm)
+    }
+}
+
+@Composable
+private fun TabContent(tab: Int, vm: MainViewModel, modifier: Modifier, onConnect: () -> Unit) {
+    AnimatedContent(
+        targetState = tab,
+        modifier = modifier,
+        transitionSpec = {
+            val dir = if (targetState > initialState) 1 else -1
+            (slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { w -> dir * w / 5 } + fadeIn(tween(260))) togetherWith
+                (slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { w -> -dir * w / 5 } + fadeOut(tween(180)))
+        },
+        label = "tabs",
+    ) { t ->
+        when (t) {
+            0 -> DashboardScreen(vm, onConnectClick = onConnect)
+            1 -> ModesScreen(vm)
+            else -> SetupScreen(vm)
+        }
     }
 }

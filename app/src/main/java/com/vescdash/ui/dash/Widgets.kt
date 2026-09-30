@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -128,7 +129,7 @@ fun WidgetCard(
     onToggleSize: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = Palette.cardShape
 
     Box(
         modifier
@@ -184,7 +185,8 @@ fun WidgetBody(
 
 @Composable
 private fun EditButton(icon: ImageVector, description: String, onClick: () -> Unit, tint: Color = Palette.Fg) {
-    IconButton(onClick = onClick) { Icon(icon, contentDescription = description, tint = tint) }
+    // Stark's grid has narrower cards, so its buttons are a little smaller to fit all five.
+    IconButton(onClick = onClick, modifier = if (Palette.stark) Modifier.size(34.dp) else Modifier) { Icon(icon, contentDescription = description, tint = tint) }
 }
 
 @Composable
@@ -213,7 +215,7 @@ private fun NumberWidget(r: ResolvedWidget, metric: Metric, value: Double?, big:
             val chars = max(2, metric.format(r.max).length) + 1
             min(0.5f * u, (maxWidth.value - 2 * padH - unitSize * (r.unit.length * 0.6f + 1f)) / (chars * 0.95f))
         } else {
-            if (big) 54f else 40f
+            (if (big) 54f else 40f) * theme.digitScale
         }
         Column(Modifier.fillMaxSize().padding(horizontal = padH.dp, vertical = theme.scale(12f, u, 0.08f).dp)) {
             WidgetLabel(r.label, size = theme.labelSize(u, 0.11f).sp)
@@ -254,7 +256,7 @@ private fun GaugeWidget(r: ResolvedWidget, metric: Metric, value: Double?, accen
 
     BoxWithConstraints(Modifier.fillMaxSize().padding(12.dp)) {
         val u = minOf(maxWidth.value, maxHeight.value)
-        val numberSize = (u * 0.24f).sp
+        val numberSize = (u * 0.24f * theme.digitScale).sp
         Canvas(Modifier.fillMaxSize()) {
             val stroke = size.minDimension * 0.085f
             val diameter = size.minDimension - stroke
@@ -262,6 +264,9 @@ private fun GaugeWidget(r: ResolvedWidget, metric: Metric, value: Double?, accen
             val arcSize = Size(diameter, diameter)
             drawArc(theme.outline, 150f, 240f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
             if (animated > 0.002f) {
+                if (theme.glow) {
+                    drawArc(color.copy(alpha = 0.2f), 150f, 240f * animated, false, topLeft, arcSize, style = Stroke(stroke * 2f, cap = StrokeCap.Round))
+                }
                 drawArc(color, 150f, 240f * animated, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
             }
         }
@@ -300,7 +305,7 @@ private fun BarWidget(r: ResolvedWidget, metric: Metric, value: Double?, accent:
                     metric.format(value),
                     style = theme.number,
                     color = theme.fg,
-                    fontSize = theme.scale(26f, u, 0.3f).sp,
+                    fontSize = (theme.scale(26f, u, 0.3f) * theme.digitScale).sp,
                     fontWeight = FontWeight.Black,
                 )
                 Spacer(Modifier.width(4.dp))
@@ -357,7 +362,7 @@ private fun GraphWidget(
                     widget.metric.format(value),
                     style = theme.number,
                     color = theme.fg,
-                    fontSize = theme.scale(22f, u, 0.24f).sp,
+                    fontSize = (theme.scale(22f, u, 0.24f) * theme.digitScale).sp,
                     fontWeight = FontWeight.Black,
                 )
                 Spacer(Modifier.width(4.dp))
@@ -396,6 +401,7 @@ private fun GraphWidget(
                     close()
                 }
                 drawPath(fill, Brush.verticalGradient(listOf(color.copy(alpha = 0.35f), color.copy(alpha = 0f))))
+                if (theme.glow) drawPath(line, color.copy(alpha = 0.25f), style = Stroke(6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
                 drawPath(line, color, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
         }

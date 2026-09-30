@@ -23,7 +23,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
+import com.vescdash.ui.theme.HeavyWideFont
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -186,24 +188,24 @@ private fun DrawScope.drawPowerMode(
     drawRoundRect(border, p.topLeft, p.size, radius, style = Stroke(0.006f * g.h))
     val iconSize = 0.085f * g.h
     drawIcon(bolt, Offset(p.left + p.width * 0.34f, p.center.y), iconSize, boltColor)
-    drawCentered(m, AnnotatedString(number), wide(0.1f * g.h, g.c.text), Offset(p.left + p.width * 0.62f, p.center.y))
+    drawCentered(m, AnnotatedString(number), digits(g.c, 0.1f * g.h, g.c.text), Offset(p.left + p.width * 0.62f, p.center.y))
 }
 
 private fun DrawScope.drawBatteryValue(g: RideGeometry, m: TextMeasurer, battery: Double?, color: Color) {
     val text = buildAnnotatedString {
         append(battery?.roundToInt()?.toString() ?: "--")
-        appendUnit(" %", (0.06f * g.h).toSp())
+        appendUnit(" %", (0.06f * g.h).toSp(), family = if (g.c.stark) HeavyWideFont else FontFamily.Default)
     }
-    drawCentered(m, text, wide(0.165f * g.h, color), Offset(g.panelCenterX(1), g.valueY))
+    drawCentered(m, text, digits(g.c, 0.165f * g.h, color), Offset(g.panelCenterX(1), g.valueY))
 }
 
 private fun DrawScope.drawRidingTime(g: RideGeometry, m: TextMeasurer, ms: Long) {
     val text = ridingTimeText(
         ms,
         big = SpanStyle(fontSize = (0.105f * g.h).toSp(), color = g.c.text),
-        small = SpanStyle(fontSize = (0.05f * g.h).toSp(), color = g.c.textSoft),
+        small = SpanStyle(fontSize = (0.05f * g.h).toSp(), color = g.c.textSoft, fontFamily = if (g.c.stark) HeavyWideFont else null),
     )
-    drawCentered(m, text, wide(0.105f * g.h, g.c.text), Offset(g.panelCenterX(2), g.valueY))
+    drawCentered(m, text, digits(g.c, 0.105f * g.h, g.c.text), Offset(g.panelCenterX(2), g.valueY))
 }
 
 private fun DrawScope.drawBatteryBand(g: RideGeometry, frac: Float, color: Color, live: Boolean) {
@@ -221,8 +223,16 @@ private fun DrawScope.drawBatteryBand(g: RideGeometry, frac: Float, color: Color
         style = Stroke(g.bandW),
     )
     if (live && frac > 0f) {
-        arc(g, color.copy(alpha = 0.07f), g.bandStart, g.bandSweep * frac, g.bandR, g.bandW * 1.7f)
+        if (g.c.stark) {
+            // A halo that bleeds off both edges of the band
+            arc(g, color.copy(alpha = 0.10f), g.bandStart, g.bandSweep * frac, g.bandR, g.bandW * 2.6f)
+            arc(g, color.copy(alpha = 0.18f), g.bandStart, g.bandSweep * frac, g.bandR, g.bandW * 1.6f)
+        } else {
+            arc(g, color.copy(alpha = 0.07f), g.bandStart, g.bandSweep * frac, g.bandR, g.bandW * 1.7f)
+        }
         arc(g, color, g.bandStart, g.bandSweep * frac, g.bandR, g.bandW)
+        // and a brighter rim along the outer edge
+        if (g.c.stark) drawArc(Color.White.copy(alpha = 0.22f), g.bandStart, g.bandSweep * frac, false, Offset(g.cx - g.bandR - g.bandW * 0.4f, g.cy - g.bandR - g.bandW * 0.4f), Size(2 * (g.bandR + g.bandW * 0.4f), 2 * (g.bandR + g.bandW * 0.4f)), style = Stroke(g.bandW * 0.2f))
     }
     // Fine segmentation across the band
     val inner = g.bandR - g.bandW / 2f
@@ -257,6 +267,9 @@ private fun DrawScope.drawScale(g: RideGeometry, m: TextMeasurer, reveal: Float)
             g.point(a, g.tickR + len),
             strokeWidth = if (major) 0.005f * g.k else 0.0028f * g.k,
         )
+        if (g.c.stark && i == 100) {
+            drawCentered(m, AnnotatedString("%"), wide(0.022f * g.k, g.c.label).copy(fontFamily = HeavyWideFont), g.point(a + 3.8f, g.labelR - 0.012f * g.k))
+        }
         if (mid) {
             val style = if (major) {
                 wide(0.036f * g.k, g.c.tickMajor)
@@ -287,6 +300,9 @@ private fun DrawScope.drawTorque(g: RideGeometry, m: TextMeasurer, bolt: VectorP
     }
     val labelStyle = wide(0.019f * g.k, g.c.label)
     val r = g.torqueR - 0.075f * g.k
+    if (g.c.stark) {
+        drawCentered(m, AnnotatedString("Nm"), labelStyle, g.point(g.maxAngle + 5f, g.torqueR), rotation = g.maxAngle + 5f + 90f)
+    }
     drawCentered(m, AnnotatedString("REG"), labelStyle, g.point(g.regAngle + 1.5f, r), rotation = g.regAngle + 1.5f + 90f)
     drawCentered(m, AnnotatedString("0"), labelStyle, g.point(g.zeroAngle, r), rotation = g.zeroAngle + 90f)
     drawCentered(m, AnnotatedString("MAX"), labelStyle, g.point(g.maxAngle - 2f, r), rotation = g.maxAngle - 2f + 90f)
@@ -294,6 +310,6 @@ private fun DrawScope.drawTorque(g: RideGeometry, m: TextMeasurer, bolt: VectorP
 }
 
 private fun DrawScope.drawSpeed(g: RideGeometry, m: TextMeasurer, speed: Double, unit: String) {
-    drawCentered(m, AnnotatedString(speed.roundToInt().toString()), wide(0.135f * g.k, g.c.text), Offset(g.cx, g.speedY))
-    drawCentered(m, AnnotatedString(unit), wide(0.036f * g.k, g.c.label, 0.05f), Offset(g.cx, g.unitY))
+    drawCentered(m, AnnotatedString(speed.roundToInt().toString()), digits(g.c, 0.135f * g.k, g.c.speed), Offset(g.cx, g.speedY))
+    drawCentered(m, AnnotatedString(unit), wide(0.036f * g.k, g.c.unit, 0.05f), Offset(g.cx, g.unitY))
 }

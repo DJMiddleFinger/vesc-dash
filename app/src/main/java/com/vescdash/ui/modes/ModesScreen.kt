@@ -62,6 +62,10 @@ const val MAX_MODES = 6
 
 @Composable
 fun ModesScreen(vm: MainViewModel) {
+    if (Palette.stark) {
+        StarkModesScreen(vm)
+        return
+    }
     val modes by vm.modes.collectAsStateWithLifecycle()
     val activeId by vm.activeModeId.collectAsStateWithLifecycle()
     val vehicle by vm.vehicle.collectAsStateWithLifecycle()

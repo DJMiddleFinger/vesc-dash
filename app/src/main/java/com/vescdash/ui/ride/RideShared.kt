@@ -61,6 +61,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.drawText
@@ -78,6 +79,7 @@ import com.vescdash.data.defaultThresholds
 import com.vescdash.data.unit
 import com.vescdash.data.value
 import com.vescdash.ui.MainViewModel
+import com.vescdash.ui.theme.HeavyWideFont
 import com.vescdash.ui.theme.WideFont
 import com.vescdash.vesc.VescProtocol
 import kotlin.math.abs
@@ -117,6 +119,12 @@ internal class RidePalette(
     val tilePill: Color,
     /** Text/icons drawn on top of a battery-coloured pill. */
     val onAccent: Color,
+    /** The big speed digits, a softer gray than [text] in Stark. */
+    val speed: Color = text,
+    /** The unit under the speed. */
+    val unit: Color = label,
+    /** Stark's ride view: heavier wide digits, a glowing segmented arc and the extra scale labels. */
+    val stark: Boolean = false,
 ) {
     companion object {
         val Dark = RidePalette(
@@ -132,6 +140,22 @@ internal class RidePalette(
             homeButton = Color(0xFFDADADD), homeIcon = Color(0xFF1A1A1C), watermark = Color(0xFF2A2A2E),
             tilesBgTop = Color(0xFF131416), tilesBgBottom = Color(0xFF060607),
             tile = Color(0xFF1C1D20), tilePill = Color(0xFF2D2E32), onAccent = Color(0xFF0B0B0C),
+        )
+        /** Pure neutral grays with Stark's battery greens, amber, red and cyan. */
+        val Stark = RidePalette(
+            bg = Color(0xFF121212), minimalBg = Color(0xFF000000),
+            panel = Color(0xFF000000), panelLine = Color(0xFF212723), label = Color(0xFF484848),
+            domeCenter = Color(0xFF191919), domeEdge = Color(0xFF212121), inner = Color(0xFF262626),
+            track = Color(0xFF474747), trackEnd = Color(0xFF474747), torqueTrack = Color(0xFF3A3A3A),
+            tick = Color(0xFF484848), tickMajor = Color(0xFFF8F8F8),
+            text = Color(0xFFF8F8F8), textSoft = Color(0xFF888888),
+            green = Color(0xFF48F8A0), amber = Color(0xFFF88018), red = Color(0xFFF81818), cyan = Color(0xFF4BF9EF),
+            heatStart = Color(0xFFFFD60A),
+            pill = Color(0xFF202020), pillBorder = Color(0xFF454545),
+            homeButton = Color(0xFFD0D0D0), homeIcon = Color(0xFF1A1A1C), watermark = Color(0xFF262626),
+            tilesBgTop = Color(0xFF131416), tilesBgBottom = Color(0xFF060607),
+            tile = Color(0xFF202020), tilePill = Color(0xFF2C2C2C), onAccent = Color(0xFF0B0B0C),
+            speed = Color(0xFFD0D0D0), unit = Color(0xFF666666), stark = true,
         )
         val Light = RidePalette(
             bg = Color(0xFFE8E8EC), minimalBg = Color(0xFFF5F5F7),
@@ -383,6 +407,10 @@ internal fun DrawScope.wide(sizePx: Float, color: Color, letterSpacing: Float = 
     letterSpacing = letterSpacing.em,
 )
 
+/** Big digits: Stark sets them in a heavier wide face than the labels around them. */
+internal fun DrawScope.digits(c: RidePalette, sizePx: Float, color: Color, letterSpacing: Float = 0f) =
+    if (c.stark) wide(sizePx, color, letterSpacing).copy(fontFamily = HeavyWideFont, fontSynthesis = FontSynthesis.None) else wide(sizePx, color, letterSpacing)
+
 /** Draws text centred on [anchor]; [alignX] 0 = left edge at anchor, 1 = right edge. */
 internal fun DrawScope.drawCentered(
     measurer: TextMeasurer,
@@ -434,13 +462,14 @@ internal fun DrawScope.drawPowerBar(
     drawCentered(m, AnnotatedString("MAX"), labelStyle, Offset(x1 + gap, y), alignX = 0f)
 }
 
-/** Michroma draws % and ° badly ("o/o", a small "o"), so units use the system face. */
+/** Michroma draws % and ° badly ("o/o", a small "o"), so units use the system face ([family] when given). */
 internal fun AnnotatedString.Builder.appendUnit(
     text: String,
     fontSize: TextUnit = TextUnit.Unspecified,
     weight: FontWeight = FontWeight.SemiBold,
+    family: FontFamily = FontFamily.Default,
 ) {
-    withStyle(SpanStyle(fontFamily = FontFamily.Default, fontWeight = weight, fontSize = fontSize)) { append(text) }
+    withStyle(SpanStyle(fontFamily = family, fontWeight = weight, fontSize = fontSize)) { append(text) }
 }
 
 /** Riding time as "0 h 17 m": digits in [big], units in [small]. */

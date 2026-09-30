@@ -13,9 +13,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -39,7 +38,11 @@ import com.vescdash.data.WidgetType
 import com.vescdash.data.defaultRange
 import com.vescdash.data.defaultThresholds
 import com.vescdash.data.unit
+import com.vescdash.ui.common.AppButton
+import com.vescdash.ui.common.AppChip
 import com.vescdash.ui.common.SectionLabel
+import com.vescdash.ui.common.appTextFieldColors
+import com.vescdash.ui.common.caps
 import com.vescdash.ui.common.toFieldText
 import com.vescdash.ui.theme.Palette
 
@@ -70,7 +73,84 @@ fun WidgetEditorSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val range = metric.defaultRange(vehicle)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Palette.Surface) {
+    val stark = Palette.stark
+
+    val appearanceSection: @Composable () -> Unit = {
+        SectionLabel("STYLE")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            WidgetType.entries.forEach { t ->
+                AppChip(type == t, t.label, onClick = { type = t })
+            }
+        }
+
+        if (showSize) {
+            SectionLabel("SIZE")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppChip(size == WidgetSize.HALF, "Half width", onClick = { size = WidgetSize.HALF })
+                AppChip(size == WidgetSize.FULL, "Full width", onClick = { size = WidgetSize.FULL })
+            }
+        }
+
+        SectionLabel("DATA")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Metric.entries.forEach { m ->
+                AppChip(
+                    metric == m,
+                    m.label,
+                    onClick = {
+                        if (metric != m) {
+                            metric = m
+                            val th = m.defaultThresholds()
+                            warnText = th?.first.toFieldText()
+                            dangerText = th?.second.toFieldText()
+                            minText = ""
+                            maxText = ""
+                        }
+                    },
+                )
+            }
+        }
+    }
+
+    val valuesSection: @Composable () -> Unit = {
+        OutlinedTextField(
+            value = label,
+            onValueChange = { label = it.take(20) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Custom label (optional)") },
+            placeholder = { Text(metric.label) },
+            singleLine = true,
+            colors = appTextFieldColors(),
+        )
+
+        SectionLabel("SCALE  ·  ${metric.unit(vehicle)}")
+        Row {
+            NumField("Min", minText, range.start.toFieldText(), Modifier.weight(1f)) { minText = it }
+            Spacer(Modifier.width(10.dp))
+            NumField("Max", maxText, range.endInclusive.toFieldText(), Modifier.weight(1f)) { maxText = it }
+        }
+        Text("Blank = automatic for your vehicle.", color = Palette.TextDim, fontSize = 12.sp)
+
+        SectionLabel("ALERT COLORS")
+        Row {
+            NumField("Warning", warnText, "off", Modifier.weight(1f)) { warnText = it }
+            Spacer(Modifier.width(10.dp))
+            NumField("Danger", dangerText, "off", Modifier.weight(1f)) { dangerText = it }
+        }
+        Text(
+            "Turns amber at Warning and red at Danger. Set Danger lower than Warning for values where low is bad, like battery.",
+            color = Palette.TextDim,
+            fontSize = 12.sp,
+        )
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Palette.Surface,
+        // Stark is always landscape: use the width for two columns.
+        sheetMaxWidth = if (stark) 900.dp else BottomSheetDefaults.SheetMaxWidth,
+    ) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -80,81 +160,30 @@ fun WidgetEditorSheet(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                if (initial == null) "Add widget" else "Edit widget",
-                fontSize = 22.sp,
+                (if (initial == null) "Add widget" else "Edit widget").caps(),
+                fontSize = if (stark) 15.sp else 22.sp,
+                fontFamily = Palette.display,
                 fontWeight = FontWeight.Bold,
                 color = Palette.Fg,
             )
 
-            SectionLabel("STYLE")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                WidgetType.entries.forEach { t ->
-                    FilterChip(selected = type == t, onClick = { type = t }, label = { Text(t.label) })
+            if (stark) {
+                Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) { appearanceSection() }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) { valuesSection() }
                 }
+            } else {
+                appearanceSection()
+                valuesSection()
             }
-
-            if (showSize) {
-                SectionLabel("SIZE")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = size == WidgetSize.HALF, onClick = { size = WidgetSize.HALF }, label = { Text("Half width") })
-                    FilterChip(selected = size == WidgetSize.FULL, onClick = { size = WidgetSize.FULL }, label = { Text("Full width") })
-                }
-            }
-
-            SectionLabel("DATA")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Metric.entries.forEach { m ->
-                    FilterChip(
-                        selected = metric == m,
-                        onClick = {
-                            if (metric != m) {
-                                metric = m
-                                val th = m.defaultThresholds()
-                                warnText = th?.first.toFieldText()
-                                dangerText = th?.second.toFieldText()
-                                minText = ""
-                                maxText = ""
-                            }
-                        },
-                        label = { Text(m.label) },
-                    )
-                }
-            }
-
-            OutlinedTextField(
-                value = label,
-                onValueChange = { label = it.take(20) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Custom label (optional)") },
-                placeholder = { Text(metric.label) },
-                singleLine = true,
-            )
-
-            SectionLabel("SCALE  ·  ${metric.unit(vehicle)}")
-            Row {
-                NumField("Min", minText, range.start.toFieldText(), Modifier.weight(1f)) { minText = it }
-                Spacer(Modifier.width(10.dp))
-                NumField("Max", maxText, range.endInclusive.toFieldText(), Modifier.weight(1f)) { maxText = it }
-            }
-            Text("Blank = automatic for your vehicle.", color = Palette.TextDim, fontSize = 12.sp)
-
-            SectionLabel("ALERT COLORS")
-            Row {
-                NumField("Warning", warnText, "off", Modifier.weight(1f)) { warnText = it }
-                Spacer(Modifier.width(10.dp))
-                NumField("Danger", dangerText, "off", Modifier.weight(1f)) { dangerText = it }
-            }
-            Text(
-                "Turns amber at Warning and red at Danger. Set Danger lower than Warning for values where low is bad, like battery.",
-                color = Palette.TextDim,
-                fontSize = 12.sp,
-            )
 
             Spacer(Modifier.height(4.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) { Text("Cancel") }
                 Spacer(Modifier.width(8.dp))
-                Button(
+                AppButton(
+                    "Save",
+                    primary = true,
                     onClick = {
                         onSave(
                             DashWidget(
@@ -170,7 +199,7 @@ fun WidgetEditorSheet(
                             ),
                         )
                     },
-                ) { Text("Save") }
+                )
             }
         }
     }
@@ -186,6 +215,7 @@ private fun NumField(label: String, value: String, placeholder: String, modifier
         placeholder = { Text(placeholder) },
         singleLine = true,
         isError = value.isNotBlank() && value.toDoubleOrNull() == null,
+        colors = appTextFieldColors(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
     )
 }

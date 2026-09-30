@@ -5,7 +5,7 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Generates a plausible ride (pulls, lifts, braking, a stop every ~70 s) so the UI can
+ * Generates a plausible ride (a launch, pulls, lifts, braking, a stop every ~70 s) so the UI can
  * be tried without a VESC. Respects the active mode's power, regen and top speed.
  */
 class DemoSimulator {
@@ -28,6 +28,7 @@ class DemoSimulator {
         val cycle = t % 70.0
         val throttle = when {
             cycle < 6.0 -> 0.0 // stopped
+            cycle < 9.0 -> 1.0 // full-throttle launch away from the stop
             cycle < 60.0 -> (0.55 + 0.45 * sin(t * 0.45) + 0.2 * sin(t * 1.7)).coerceIn(-0.6, 1.0)
             else -> -0.8 // brake to a stop
         }

@@ -66,6 +66,7 @@ import com.vescdash.data.RideRect
 import com.vescdash.data.Snapped
 import com.vescdash.data.newId
 import com.vescdash.ui.MainViewModel
+import com.vescdash.ui.orientationFor
 import com.vescdash.ui.dash.WidgetEditorSheet
 import com.vescdash.ui.theme.Palette
 import kotlin.math.min
@@ -211,7 +212,7 @@ internal fun RideLayoutEditor(vm: MainViewModel) {
     DisposableEffect(view) {
         val activity = view.context.findActivity()
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+        onDispose { activity?.requestedOrientation = orientationFor(vehicle.appearance) }
     }
     ImmersiveMode()
 
@@ -334,7 +335,7 @@ private fun ToolButton(icon: ImageVector, description: String, tint: Color, enab
 private fun ConfirmDialog(title: String, text: String, action: String, dismiss: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Palette.Surface2,
+        containerColor = Palette.Dialog,
         title = { Text(title) },
         text = { Text(text) },
         confirmButton = { TextButton(onClick = onConfirm) { Text(action) } },

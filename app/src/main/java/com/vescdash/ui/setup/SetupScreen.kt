@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,12 +21,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vescdash.ble.VescBleTransport
+import com.vescdash.data.AppAppearance
 import com.vescdash.data.KMH_TO_MPH
 import com.vescdash.data.RideStyle
 import com.vescdash.data.RideTheme
 import com.vescdash.data.VehicleMath
 import com.vescdash.data.speedUnit
 import com.vescdash.ui.MainViewModel
+import com.vescdash.ui.common.AppButton
+import com.vescdash.ui.common.AppChip
 import com.vescdash.ui.common.Card
 import com.vescdash.ui.common.SettingNumber
 import com.vescdash.ui.common.SettingSwitch
@@ -45,14 +46,28 @@ fun SetupScreen(vm: MainViewModel) {
     val firmware by vm.firmware.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     val connected = connection as? VescBleTransport.State.Connected
+    val stark = v.appearance == AppAppearance.STARK
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    val appearanceCard: @Composable () -> Unit = {
+        Card(title = "APPEARANCE") {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppAppearance.entries.forEach { a ->
+                    AppChip(v.appearance == a, a.label) { vm.updateVehicle { it.copy(appearance = a) } }
+                }
+            }
+            Text(
+                if (stark) {
+                    "Landscape only. An unofficial lookalike of the Stark Varg app; not affiliated with Stark Future."
+                } else {
+                    "Stark Varg restyles the whole app and locks it to landscape."
+                },
+                color = Palette.TextDim,
+                fontSize = 12.sp,
+            )
+        }
+    }
+
+    val vehicleCard: @Composable () -> Unit = {
         Card(title = "VEHICLE") {
             Row {
                 SettingNumber("Motor poles", v.motorPoles.toDouble(), 2.0..120.0, Modifier.weight(1f), integer = true) { x ->
@@ -86,40 +101,43 @@ fun SetupScreen(vm: MainViewModel) {
                 fontSize = 12.sp,
             )
         }
+    }
 
+    val rideViewCard: @Composable () -> Unit = {
         Card(title = "RIDE VIEW  ·  LANDSCAPE") {
-            Text("Turn the phone sideways to show it.", color = Palette.TextDim, fontSize = 12.sp)
-            Text("Style", color = Palette.Fg, fontSize = 15.sp)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RideStyle.entries.forEach { style ->
-                    FilterChip(
-                        selected = v.rideStyle == style,
-                        onClick = { vm.updateVehicle { it.copy(rideStyle = style) } },
-                        label = { Text(style.label) },
-                    )
+            if (stark) {
+                Text("Opens by itself above 5 km/h, or tap RIDE in the side rail.", color = Palette.TextDim, fontSize = 12.sp)
+            } else {
+                Text("Turn the phone sideways to show it.", color = Palette.TextDim, fontSize = 12.sp)
+                Text("Style", color = Palette.Fg, fontSize = 15.sp)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RideStyle.entries.forEach { style ->
+                        AppChip(v.rideStyle == style, style.label) { vm.updateVehicle { it.copy(rideStyle = style) } }
+                    }
                 }
-            }
-            if (v.rideStyle == RideStyle.CUSTOM) {
-                Text(
-                    "Drag widgets anywhere and pinch to resize them. You can also edit from the ride view while stopped.",
-                    color = Palette.TextDim,
-                    fontSize = 12.sp,
-                )
-                OutlinedButton(onClick = vm::openLayoutEditor, modifier = Modifier.fillMaxWidth()) { Text("Edit custom layout") }
-            }
-            Text("Theme", color = Palette.Fg, fontSize = 15.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RideTheme.entries.forEach { theme ->
-                    FilterChip(
-                        selected = v.rideTheme == theme,
-                        onClick = { vm.updateVehicle { it.copy(rideTheme = theme) } },
-                        label = { Text(theme.label) },
+                if (v.rideStyle == RideStyle.CUSTOM) {
+                    Text(
+                        "Drag widgets anywhere and pinch to resize them. You can also edit from the ride view while stopped.",
+                        color = Palette.TextDim,
+                        fontSize = 12.sp,
                     )
+                    AppButton("Edit custom layout", onClick = vm::openLayoutEditor, modifier = Modifier.fillMaxWidth())
                 }
+                Text("Theme", color = Palette.Fg, fontSize = 15.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RideTheme.entries.forEach { theme ->
+                        AppChip(v.rideTheme == theme, theme.label) { vm.updateVehicle { it.copy(rideTheme = theme) } }
+                    }
+                }
+                Text("Light is easier to read in direct sun. Auto follows the phone's dark mode.", color = Palette.TextDim, fontSize = 12.sp)
             }
-            Text("Light is easier to read in direct sun. Auto follows the phone's dark mode.", color = Palette.TextDim, fontSize = 12.sp)
+            SettingSwitch("Launch animation", v.launchAnimation, "Speed streaks, an edge glow and a screen push when you accelerate hard.") { on ->
+                vm.updateVehicle { it.copy(launchAnimation = on) }
+            }
         }
+    }
 
+    val batteryCard: @Composable () -> Unit = {
         Card(title = "BATTERY") {
             SettingSwitch(
                 "Stabilize battery %",
@@ -134,7 +152,9 @@ fun SetupScreen(vm: MainViewModel) {
                 help = "Optional. With capacity set, charge used is counted directly for the steadiest reading. 0 = unknown.",
             ) { x -> vm.updateVehicle { it.copy(batteryCapacityAh = x) } }
         }
+    }
 
+    val heatCard: @Composable () -> Unit = {
         Card(title = "HEAT WARNINGS  ·  RIDE VIEW") {
             Text(
                 "The icon pops up at these temperatures in yellow, then turns red as it heats up — " +
@@ -154,7 +174,9 @@ fun SetupScreen(vm: MainViewModel) {
                 }
             }
         }
+    }
 
+    val limitsCard: @Composable () -> Unit = {
         Card(title = "BASE LIMITS  ·  FROM VESC TOOL") {
             Text(
                 "Enter the same values as your VESC Tool motor config. Drive modes scale down from these and never go above them.",
@@ -184,7 +206,9 @@ fun SetupScreen(vm: MainViewModel) {
             }
             Text("Current limits are per controller.", color = Palette.TextDim, fontSize = 12.sp)
         }
+    }
 
+    val controllerCard: @Composable () -> Unit = {
         Card(title = "CONTROLLER") {
             SettingSwitch("Dual controller (CAN)", v.dualController, "Read and tune a second VESC over CAN") { on ->
                 vm.updateVehicle { it.copy(dualController = on) }
@@ -207,7 +231,9 @@ fun SetupScreen(vm: MainViewModel) {
                 vm.updateVehicle { it.copy(pollHz = x.toInt()) }
             }
         }
+    }
 
+    val connectionCard: @Composable () -> Unit = {
         Card(title = "CONNECTION") {
             Text(
                 if (connected != null) "Connected to ${connected.name ?: connected.address}" else "Not connected",
@@ -217,9 +243,42 @@ fun SetupScreen(vm: MainViewModel) {
             if (firmware != null && connected != null) {
                 Text("Firmware $firmware", color = Palette.TextDim, fontSize = 13.sp)
             }
-            OutlinedButton(onClick = vm::reapplyMode, enabled = connected != null, modifier = Modifier.fillMaxWidth()) {
-                Text("Re-send active mode")
+            AppButton("Re-send active mode", onClick = vm::reapplyMode, enabled = connected != null, modifier = Modifier.fillMaxWidth())
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (stark) {
+            // Landscape has room for two columns of cards.
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    appearanceCard()
+                    vehicleCard()
+                    rideViewCard()
+                    batteryCard()
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    heatCard()
+                    limitsCard()
+                    controllerCard()
+                    connectionCard()
+                }
             }
+        } else {
+            appearanceCard()
+            vehicleCard()
+            rideViewCard()
+            batteryCard()
+            heatCard()
+            limitsCard()
+            controllerCard()
+            connectionCard()
         }
         Spacer(Modifier.width(1.dp))
     }

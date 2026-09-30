@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
@@ -49,7 +50,9 @@ class VescRepository(
     val transport = VescBleTransport(context.applicationContext)
     val connection: StateFlow<VescBleTransport.State> = transport.state
 
-    val vehicle: StateFlow<VehicleSettings> = store.vehicle.stateIn(scope, SharingStarted.Eagerly, VehicleSettings())
+    // Read once up front, so the very first frame already has the stored appearance and orientation
+    // (Stark would otherwise flash Classic in portrait until the file loads).
+    val vehicle: StateFlow<VehicleSettings> = store.vehicle.stateIn(scope, SharingStarted.Eagerly, runBlocking { store.vehicle.first() })
     val modes: StateFlow<List<DriveMode>> = store.modes.stateIn(scope, SharingStarted.Eagerly, Defaults.modes)
     val activeModeId: StateFlow<String?> = store.activeModeId.stateIn(scope, SharingStarted.Eagerly, null)
     val dashboards: StateFlow<List<Dashboard>> = store.dashboards.stateIn(scope, SharingStarted.Eagerly, Defaults.dashboards)

@@ -229,7 +229,7 @@ fun TunerScreen(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            containerColor = Palette.Surface2,
+            containerColor = Palette.Dialog,
             title = { Text("Delete ${mode.name}?") },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Delete", color = Palette.Danger) }
@@ -240,7 +240,7 @@ fun TunerScreen(
 }
 
 @Composable
-private fun ColorRow(selected: Long, onPick: (Long) -> Unit) {
+internal fun ColorRow(selected: Long, onPick: (Long) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Defaults.modeColors.forEach { argb ->
             val isSel = argb == selected
