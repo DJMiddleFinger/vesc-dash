@@ -20,7 +20,7 @@ An Android app that connects to a VESC motor controller over Bluetooth: a live d
 - **Heat warnings.** Controller and motor icons appear at 60 °C by default (adjustable), shifting to red and pulsing at 85 °C / 100 °C.
 - **Stable battery %.** Learns the pack's internal resistance and adds back voltage sag; enter the pack capacity (Setup → Battery) for the steadiest reading.
 - **Settings per controller.** Vehicle setup and modes follow the VESC you connect to (see below).
-- **Demo mode** (Setup → Controller) plays simulated ride data so you can try everything without a VESC.
+- **Demo mode** (Setup → Controller) plays simulated ride data so you can try everything without a VESC. It turns itself off when the app is closed and reopened.
 
 ## Build & install
 

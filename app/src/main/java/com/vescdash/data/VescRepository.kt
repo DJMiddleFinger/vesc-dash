@@ -59,7 +59,11 @@ class VescRepository(
 
     // Read once up front, so the very first frame already has the stored appearance and orientation
     // (Stark would otherwise flash Classic in portrait until the file loads).
-    val vehicle: StateFlow<VehicleSettings> = store.vehicle.stateIn(scope, SharingStarted.Eagerly, runBlocking { store.vehicle.first() })
+    val vehicle: StateFlow<VehicleSettings> = store.vehicle.stateIn(scope, SharingStarted.Eagerly, runBlocking {
+        // Demo mode is for trying the app out, so it doesn't survive a restart.
+        store.updateVehicle { it.copy(demoMode = false) }
+        store.vehicle.first()
+    })
     val modes: StateFlow<List<DriveMode>> = store.modes.stateIn(scope, SharingStarted.Eagerly, Defaults.modes)
     val activeModeId: StateFlow<String?> = store.activeModeId.stateIn(scope, SharingStarted.Eagerly, null)
     val dashboards: StateFlow<List<Dashboard>> = store.dashboards.stateIn(scope, SharingStarted.Eagerly, Defaults.dashboards)
