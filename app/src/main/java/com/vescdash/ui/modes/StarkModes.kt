@@ -227,12 +227,27 @@ private fun StarkModeEditor(
             Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ParamCard(
                     Modifier.weight(1f).fillMaxHeight(), Icons.Filled.Bolt, "Power", "% of base limits", "${draft.powerPct}",
-                    draft.powerPct.toFloat(), 10f, 100f, 5f, Palette.Cyan,
-                ) { draft = draft.copy(powerPct = it.roundToInt()) }
+                    draft.powerPct.toFloat(), 1f, 100f, 1f, Palette.Cyan,
+                ) { draft = draft.copy(powerPct = snapPower(it)) }
                 ParamCard(
                     Modifier.weight(1f).fillMaxHeight(), Icons.Filled.Autorenew, "Regenerative braking", "% of base limits", "${draft.regenPct}",
                     draft.regenPct.toFloat(), 10f, 100f, 5f, Palette.Red,
                 ) { draft = draft.copy(regenPct = it.roundToInt()) }
+            }
+
+            if (vehicle.throttleControl) {
+                Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Card(Modifier.weight(1f).fillMaxHeight(), title = "THROTTLE RESPONSE") {
+                        ThrottleCurveEditor(
+                            draft.throttleExp, vehicle.throttleExp, c, { draft = draft.copy(throttleExp = it) },
+                            Modifier.fillMaxWidth().height(170.dp),
+                        )
+                    }
+                    powerBuildField(draft, vehicle) { draft = it }?.let { FieldCard(Modifier.weight(1f).fillMaxHeight(), it, c) }
+                        ?: Spacer(Modifier.weight(1f))
+                }
+            } else {
+                Text("Turn on Setup → Throttle to shape how power comes on.", color = Palette.TextDim, fontSize = 11.sp)
             }
 
             Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -281,10 +296,7 @@ private fun StarkModeEditor(
                 advancedFields(draft, vehicle) { draft = it }.chunked(2).forEach { pair ->
                     Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         pair.forEach { f ->
-                            LimitCard(
-                                Modifier.weight(1f).fillMaxHeight(), f.title, f.help, f.enabled, f.valueText,
-                                f.value, f.min, f.max, f.step, c, onToggle = f.onToggle, onValue = f.onValue,
-                            )
+                            FieldCard(Modifier.weight(1f).fillMaxHeight(), f, c)
                         }
                         if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
@@ -349,6 +361,12 @@ private fun ParamCard(
         StarkWell { StarkSlider(value, onValue, min, max, color, step = step) }
     }
 }
+
+@Composable
+private fun FieldCard(modifier: Modifier, f: AdvancedField, color: Color) = LimitCard(
+    modifier, f.title, f.help, f.enabled, f.valueText, f.value, f.min, f.max, f.step, color,
+    onToggle = f.onToggle, onValue = f.onValue,
+)
 
 /** A limit that can be switched off; its slider shows only while it is on. */
 @Composable

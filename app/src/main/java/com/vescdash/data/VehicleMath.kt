@@ -3,6 +3,7 @@ package com.vescdash.data
 import com.vescdash.vesc.TempLimits
 import kotlin.math.PI
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
@@ -64,9 +65,9 @@ object VehicleMath {
 
     /** Translate a drive mode into the COMM_SET_MCCONF_TEMP limits. */
     fun limitsFor(mode: DriveMode, v: VehicleSettings): TempLimits {
-        val power = (mode.powerPct / 100.0).coerceIn(0.05, 1.0)
+        val power = (mode.powerPct / 100.0).coerceIn(0.01, 1.0)
         val regen = (mode.regenPct / 100.0).coerceIn(0.05, 1.0)
-        val battery = (mode.batteryPct?.let { it / 100.0 } ?: power).coerceIn(0.05, 1.0)
+        val battery = (mode.batteryPct?.let { it / 100.0 } ?: power).coerceIn(0.01, 1.0)
         val regenCharge = (mode.regenChargePct?.let { it / 100.0 } ?: regen).coerceIn(0.05, 1.0)
         val erpm = mode.topSpeedKmh?.let { min(erpmForSpeedKmh(it, v), v.maxErpm) } ?: v.maxErpm
         return TempLimits(
@@ -84,6 +85,22 @@ object VehicleMath {
     }
 
     fun kwToHp(kw: Double) = kw * 1.34102
+
+    /**
+     * The VESC's exponential throttle curve (`throttle_exp`): throttle position 0..1 to output 0..1.
+     * Negative [exp] is softer at first, positive has more bite. ponytail: the VESC's default exponential
+     * mode only; the polynomial and natural modes bend differently.
+     */
+    fun throttleCurve(x: Double, exp: Double): Double {
+        val a = x.coerceIn(0.0, 1.0)
+        return if (exp >= 0) 1 - (1 - a).pow(1 + exp) else a.pow(1 - exp)
+    }
+
+    /** The [throttleCurve] exponent whose output at half throttle is [mid]: where the curve editor's handle sits. */
+    fun throttleExpForMid(mid: Double): Double {
+        val m = mid.coerceIn(0.01, 0.99)
+        return if (m >= 0.5) -ln(1 - m) / ln(2.0) - 1 else ln(m) / ln(2.0) + 1
+    }
 }
 
 /** Round up to a "nice" chart bound: 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10 × 10^n. */

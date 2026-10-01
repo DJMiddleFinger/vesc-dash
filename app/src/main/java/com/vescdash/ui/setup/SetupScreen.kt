@@ -223,7 +223,7 @@ fun SetupScreen(vm: MainViewModel) {
             SettingSwitch(
                 "Let modes change throttle response",
                 v.throttleControl,
-                "Adds throttle curve and ramp times to each mode's Advanced settings. Needs the ADC throttle on VESC firmware 6.00 or newer. " +
+                "Adds an editable throttle curve and power build-up time under each mode's Power, and a release ramp in Advanced. Needs the ADC throttle on VESC firmware 6.00 or newer. " +
                     "Changes last until the VESC is powered off; turning this off doesn't undo them.",
             ) { on -> vm.updateVehicle { it.copy(throttleControl = on) } }
             if (v.throttleControl) {

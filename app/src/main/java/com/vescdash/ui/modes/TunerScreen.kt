@@ -163,10 +163,30 @@ fun TunerScreen(
                 valueText = "${draft.powerPct}%",
                 help = "Motor torque and battery draw",
                 value = draft.powerPct.toFloat(),
-                range = 10f..100f,
-                steps = 17,
+                range = 1f..100f,
+                steps = 0,
                 color = c,
-            ) { draft = draft.copy(powerPct = (it / 5f).roundToInt() * 5) }
+            ) { draft = draft.copy(powerPct = snapPower(it)) }
+
+            if (vehicle.throttleControl) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Palette.Surface)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    SectionLabel("THROTTLE RESPONSE", color = Palette.Fg)
+                    Text("Drag the curve: higher gives power sooner, lower later", color = Palette.TextDim, fontSize = 12.sp)
+                    ThrottleCurveEditor(
+                        draft.throttleExp, vehicle.throttleExp, c, { draft = draft.copy(throttleExp = it) },
+                        Modifier.fillMaxWidth().height(190.dp).padding(top = 8.dp),
+                    )
+                }
+                powerBuildField(draft, vehicle) { draft = it }?.let { FieldSlider(it, c) }
+            } else {
+                Text("Turn on Setup → Throttle to shape how power comes on.", color = Palette.TextDim, fontSize = 12.sp)
+            }
 
             TuneSlider(
                 title = "REGEN BRAKING",
@@ -206,19 +226,7 @@ fun TunerScreen(
             var showAdvanced by remember(mode.id) { mutableStateOf(advancedFields(mode, vehicle) {}.any { it.enabled }) }
             TextButton(onClick = { showAdvanced = !showAdvanced }) { Text(if (showAdvanced) "HIDE ADVANCED" else "SHOW ADVANCED") }
             if (showAdvanced) {
-                advancedFields(draft, vehicle) { draft = it }.forEach { f ->
-                    LimitSlider(
-                        title = f.title.uppercase(),
-                        enabled = f.enabled,
-                        valueText = f.valueText,
-                        help = f.help,
-                        value = f.value,
-                        range = f.min..f.max,
-                        color = c,
-                        onToggle = f.onToggle,
-                        onValue = f.onValue,
-                    )
-                }
+                advancedFields(draft, vehicle) { draft = it }.forEach { FieldSlider(it, c) }
             }
 
             SafetyNote()
@@ -314,6 +322,19 @@ private fun TuneSlider(
         )
     }
 }
+
+@Composable
+private fun FieldSlider(f: AdvancedField, color: Color) = LimitSlider(
+    title = f.title.uppercase(),
+    enabled = f.enabled,
+    valueText = f.valueText,
+    help = f.help,
+    value = f.value,
+    range = f.min..f.max,
+    color = color,
+    onToggle = f.onToggle,
+    onValue = f.onValue,
+)
 
 @Composable
 private fun LimitSlider(

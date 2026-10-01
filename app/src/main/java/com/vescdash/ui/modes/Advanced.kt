@@ -19,11 +19,31 @@ internal class AdvancedField(
     val onValue: (Float) -> Unit,
 )
 
+private fun text(on: Boolean, s: String) = if (on) s else "AUTO"
+private fun snap(x: Float, step: Float) = ((x / step).roundToInt() * step * 100).roundToInt() / 100.0
+
+/** Power % steps: 1, 5, then every 5 up to 100. */
+internal fun snapPower(x: Float): Int = if (x < 3f) 1 else if (x < 7.5f) 5 else ((x / 5f).roundToInt() * 5).coerceAtMost(100)
+
+/**
+ * How long full throttle takes to deliver full power, from instant to slow; sits under Power next to the
+ * throttle curve. Null unless Setup lets modes change the throttle.
+ */
+internal fun powerBuildField(m: DriveMode, v: VehicleSettings, set: (DriveMode) -> Unit): AdvancedField? {
+    if (!v.throttleControl) return null
+    val on = m.rampUpS != null
+    val s = m.rampUpS ?: 0.0
+    return AdvancedField(
+        "Power build-up", "Instant to slow. AUTO uses your base.",
+        on, text(on, if (s < 0.025) "INSTANT" else "%.2f s".format(s)),
+        (m.rampUpS ?: v.rampUpS).toFloat().coerceIn(0f, 3f), 0f, 3f, 0.05f,
+        { enable -> set(m.copy(rampUpS = if (enable) v.rampUpS.coerceIn(0.0, 3.0) else null)) },
+    ) { set(m.copy(rampUpS = snap(it, 0.05f))) }
+}
+
 /** The advanced settings for [m]; each change is handed to [set] as the updated mode. Both mode editors render this list. */
 internal fun advancedFields(m: DriveMode, v: VehicleSettings, set: (DriveMode) -> Unit): List<AdvancedField> {
-    fun text(on: Boolean, s: String) = if (on) s else "AUTO"
     fun pct(x: Float) = (x / 5f).roundToInt() * 5
-    fun snap(x: Float, step: Float) = ((x / step).roundToInt() * step * 100).roundToInt() / 100.0
 
     val dutyBase = (v.maxDuty * 100).roundToInt().coerceAtLeast(10)
     val dutyLo = (dutyBase / 2).coerceAtLeast(5)
@@ -63,22 +83,6 @@ internal fun advancedFields(m: DriveMode, v: VehicleSettings, set: (DriveMode) -
             ) { set(m.copy(regenCapKw = snap(it, 0.5f))) },
         )
         if (v.throttleControl) {
-            add(
-                AdvancedField(
-                    "Throttle curve", "Negative is softer, positive has more bite. AUTO uses your base.",
-                    m.throttleExp != null, text(m.throttleExp != null, "%.1f".format(m.throttleExp ?: 0.0)),
-                    (m.throttleExp ?: v.throttleExp).toFloat().coerceIn(-2f, 2f), -2f, 2f, 0.1f,
-                    { on -> set(m.copy(throttleExp = if (on) v.throttleExp.coerceIn(-2.0, 2.0) else null)) },
-                ) { set(m.copy(throttleExp = snap(it, 0.1f))) },
-            )
-            add(
-                AdvancedField(
-                    "Accel ramp", "Seconds to build throttle. AUTO uses your base.",
-                    m.rampUpS != null, text(m.rampUpS != null, "%.2f s".format(m.rampUpS ?: 0.0)),
-                    (m.rampUpS ?: v.rampUpS).toFloat().coerceIn(0.05f, 1.5f), 0.05f, 1.5f, 0.05f,
-                    { on -> set(m.copy(rampUpS = if (on) v.rampUpS.coerceIn(0.05, 1.5) else null)) },
-                ) { set(m.copy(rampUpS = snap(it, 0.05f))) },
-            )
             add(
                 AdvancedField(
                     "Release ramp", "Seconds to fall off. AUTO uses your base.",

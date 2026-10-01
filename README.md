@@ -11,7 +11,7 @@ An Android app that connects to a VESC motor controller over Bluetooth: a live d
 ## Features
 
 - **Live dashboard.** Swipeable pages of number, gauge, bar and graph widgets, each showing any metric with its own scale and warning colors.
-- **Drive modes.** Up to 6, one tap to switch. Sliders set power %, regen %, top speed and power cap, with an estimated peak kW and a power-vs-speed curve. **Show advanced** adds battery and regen-charge current, max duty, a regen power cap and (opt-in) throttle curve and ramps.
+- **Drive modes.** Up to 6, one tap to switch. Sliders set power % (down to 1 %), regen %, top speed and power cap, with an estimated peak kW and a power-vs-speed curve. With throttle control on, an editable throttle-curve graph and a power build-up slider (instant to slow) sit under Power. **Show advanced** adds battery and regen-charge current, max duty, a regen power cap and the release ramp.
 - **Ride view.** Full-screen landscape display in four styles (Classic gauge, Minimal, Tiles, Custom), dark, light or auto. Tap the ⚡ pill to change mode; when you're stopped a home button returns to the app.
 - **Custom ride screen.** Place dashboard widgets anywhere, sized to fit, next to the mode pill and warning icons. Tap the pencil beside the home button (or Setup → Ride view → Edit custom layout): drag to move, pinch or drag a corner to resize, with snapping, undo and reset.
 - **Accel timer.** A Custom-screen widget that times a standing start to the speeds you set (e.g. `30, 60`, in your units). Tap it while stopped, then go: timing starts as you pass 1 mph/km/h and the result stays until you tap again. Times are interpolated between readings, so they're only as accurate as your wheel, pole and gearing settings; a Bluetooth dropout ends the run, and results are forgotten when the app restarts.
@@ -53,7 +53,7 @@ Selecting a mode sends `COMM_SET_MCCONF_TEMP` with `store = false`, so the limit
 
 With **Dual controller (CAN)** on, the mode goes to every controller on the bus and telemetry is merged: currents and energy add up, temperatures show the hotter one. The power curve is an **estimate** from KV, pack voltage and your limits, for comparing modes, not a dyno reading.
 
-**Throttle curve and ramps** (Setup → Throttle) read the VESC's app config (`COMM_GET_APPCONF`), change those three values and write them back with `COMM_SET_APPCONF_NO_STORE`: RAM only, like the limits. Only the **ADC** app on firmware **6.00, 6.02 and 6.05** is supported; other layouts are refused. It only writes when values change, and the VESC restarts its ADC app on each write, so with Safe Start you may need to release the throttle briefly after a mode change. Not tested on hardware yet.
+**Throttle curve and ramps** (Setup → Throttle) put the curve graph and power build-up under each mode's Power; the graph assumes the VESC's default exponential throttle curve mode. They read the VESC's app config (`COMM_GET_APPCONF`), change those three values and write them back with `COMM_SET_APPCONF_NO_STORE`: RAM only, like the limits. Only the **ADC** app on firmware **6.00, 6.02 and 6.05** is supported; other layouts are refused. It only writes when values change, and the VESC restarts its ADC app on each write, so with Safe Start you may need to release the throttle briefly after a mode change. Not tested on hardware yet.
 
 ## One set of settings per controller
 

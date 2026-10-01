@@ -1,5 +1,6 @@
 package com.vescdash.data
 
+import com.vescdash.ui.modes.snapPower
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,5 +35,20 @@ class VehicleMathTest {
         assertEquals(0.95, VehicleMath.limitsFor(mode.copy(maxDutyPct = 99), v).dutyMax, 1e-9)
         val full = VehicleMath.powerCurve(mode, v).last().kmh
         assertTrue(VehicleMath.powerCurve(mode.copy(maxDutyPct = 50), v).last().kmh < full)
+    }
+
+    @Test
+    fun throttleCurveIsLinearAtZeroAndTheEditorHandleMapsBack() {
+        assertEquals(0.3, VehicleMath.throttleCurve(0.3, 0.0), 1e-9)
+        assertTrue(VehicleMath.throttleCurve(0.2, 1.0) > 0.2 && VehicleMath.throttleCurve(0.2, -1.0) < 0.2)
+        for (e in listOf(-2.0, -0.7, 0.0, 1.3, 2.0)) {
+            assertEquals(e, VehicleMath.throttleExpForMid(VehicleMath.throttleCurve(0.5, e)), 1e-9)
+        }
+    }
+
+    @Test
+    fun powerGoesDownToOnePercentInSteps() {
+        assertEquals(0.01, VehicleMath.limitsFor(mode.copy(powerPct = 1), v).currentMaxScale, 1e-9)
+        assertEquals(listOf(1, 1, 5, 5, 10, 15, 100), listOf(1f, 2.9f, 5f, 7.4f, 10f, 14f, 100f).map(::snapPower))
     }
 }

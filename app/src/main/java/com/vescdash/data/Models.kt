@@ -104,7 +104,7 @@ data class DriveMode(
     val id: String = newId(),
     val name: String,
     val color: Long,
-    /** Scales motor current (torque) and battery current. 10–100. */
+    /** Scales motor current (torque) and battery current. 1–100. */
     val powerPct: Int = 70,
     /** Scales braking current and battery regen current. 10–100. */
     val regenPct: Int = 50,
