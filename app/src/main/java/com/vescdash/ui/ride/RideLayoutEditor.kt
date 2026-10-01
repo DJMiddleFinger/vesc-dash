@@ -200,7 +200,7 @@ internal fun RideLayoutEditor(vm: MainViewModel) {
     val saved by vm.rideLayout.collectAsStateWithLifecycle()
     val vehicle by vm.vehicle.collectAsStateWithLifecycle()
     val d = collectRideData(vm)
-    val c = ridePalette(vehicle.rideTheme)
+    val c = ridePalette(vehicle)
     val accent = MaterialTheme.colorScheme.primary
     val state = remember { EditorState(saved) }
     var sheet by remember { mutableStateOf<SheetTarget?>(null) }

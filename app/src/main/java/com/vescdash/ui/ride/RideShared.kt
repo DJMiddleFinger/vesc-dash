@@ -72,9 +72,11 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vescdash.data.AppAppearance
 import com.vescdash.data.Metric
 import com.vescdash.data.ModeApplyStatus
 import com.vescdash.data.RideTheme
+import com.vescdash.data.VehicleSettings
 import com.vescdash.data.defaultThresholds
 import com.vescdash.data.unit
 import com.vescdash.data.value
@@ -180,6 +182,11 @@ internal fun ridePalette(theme: RideTheme): RidePalette = when (theme) {
     RideTheme.LIGHT -> RidePalette.Light
     RideTheme.SYSTEM -> if (isSystemInDarkTheme()) RidePalette.Dark else RidePalette.Light
 }
+
+/** Stark has its own dark neon palette whatever the ride theme says. */
+@Composable
+internal fun ridePalette(v: VehicleSettings): RidePalette =
+    if (v.appearance == AppAppearance.STARK) RidePalette.Stark else ridePalette(v.rideTheme)
 
 /** Stark's battery colours: green ≥ 50 %, amber ≥ 20 %, red below. */
 internal fun batteryColor(pct: Double?, c: RidePalette): Color = when {
@@ -494,7 +501,7 @@ internal fun DrawScope.drawModePill(m: TextMeasurer, icons: RideIcons, c: RidePa
     drawRoundRect(c.pill, pill.topLeft, pill.size, radius)
     drawRoundRect(pillBorderColor(d.modeStatus, c), pill.topLeft, pill.size, radius, style = Stroke(0.005f * u))
     drawIcon(icons.bolt, Offset(pill.left + pill.width * 0.14f, pill.center.y), 0.075f * u, d.modeColor ?: c.textSoft)
-    drawCentered(m, AnnotatedString(d.modeNumber.toString()), wide(0.085f * u, c.text), Offset(pill.left + pill.width * 0.31f, pill.center.y))
+    drawCentered(m, AnnotatedString(d.modeNumber.toString()), digits(c, 0.085f * u, c.text), Offset(pill.left + pill.width * 0.31f, pill.center.y))
     val nameLeft = pill.left + pill.width * 0.43f
     val nameRoom = pill.right - pill.height * 0.35f - nameLeft
     val name = d.modeName.uppercase()

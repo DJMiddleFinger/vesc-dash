@@ -44,8 +44,8 @@ object VehicleMath {
         val p = (mode?.powerPct ?: 100) / 100.0
         val vNom = v.nominalVoltage
         val noLoad = noLoadSpeedKmh(v)
-        val end = min(mode?.topSpeedKmh ?: Double.MAX_VALUE, maxSpeedKmh(v)).coerceAtLeast(0.1)
-        val batteryW = v.batteryCurrentMax * p * vNom * v.controllers
+        val end = minOf(mode?.topSpeedKmh ?: Double.MAX_VALUE, maxSpeedKmh(v), noLoad * dutyMax(mode, v)).coerceAtLeast(0.1)
+        val batteryW = v.batteryCurrentMax * (mode?.batteryPct?.div(100.0) ?: p) * vNom * v.controllers
         val capW = mode?.powerCapKw?.let { it * 1000.0 } ?: Double.MAX_VALUE
         val points = (0..samples).map { i ->
             val s = end * i / samples
@@ -56,12 +56,18 @@ object VehicleMath {
         return points + CurvePoint(end, 0.0)
     }
 
+    /** The mode's max duty cycle (0..1), never above the base. */
+    fun dutyMax(mode: DriveMode?, v: VehicleSettings): Double =
+        mode?.maxDutyPct?.let { min(it / 100.0, v.maxDuty) } ?: v.maxDuty
+
     fun peakKw(mode: DriveMode?, v: VehicleSettings): Double = powerCurve(mode, v).maxOf { it.kw }
 
     /** Translate a drive mode into the COMM_SET_MCCONF_TEMP limits. */
     fun limitsFor(mode: DriveMode, v: VehicleSettings): TempLimits {
         val power = (mode.powerPct / 100.0).coerceIn(0.05, 1.0)
         val regen = (mode.regenPct / 100.0).coerceIn(0.05, 1.0)
+        val battery = (mode.batteryPct?.let { it / 100.0 } ?: power).coerceIn(0.05, 1.0)
+        val regenCharge = (mode.regenChargePct?.let { it / 100.0 } ?: regen).coerceIn(0.05, 1.0)
         val erpm = mode.topSpeedKmh?.let { min(erpmForSpeedKmh(it, v), v.maxErpm) } ?: v.maxErpm
         return TempLimits(
             currentMinScale = regen,
@@ -69,11 +75,11 @@ object VehicleMath {
             erpmMin = -erpm,
             erpmMax = erpm,
             dutyMin = 0.005,
-            dutyMax = v.maxDuty,
-            wattMin = -1_500_000.0,
+            dutyMax = dutyMax(mode, v),
+            wattMin = -(mode.regenCapKw?.let { it * 1000.0 } ?: 1_500_000.0),
             wattMax = mode.powerCapKw?.let { it * 1000.0 } ?: 1_500_000.0,
-            batteryCurrentMin = -v.batteryRegenMax * regen,
-            batteryCurrentMax = v.batteryCurrentMax * power,
+            batteryCurrentMin = -v.batteryRegenMax * regenCharge,
+            batteryCurrentMax = v.batteryCurrentMax * battery,
         )
     }
 

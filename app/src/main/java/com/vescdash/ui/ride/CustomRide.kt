@@ -34,8 +34,10 @@ import androidx.compose.ui.unit.em
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vescdash.data.RideLayout
 import com.vescdash.data.RideRect
+import com.vescdash.data.WidgetType
 import com.vescdash.ui.MainViewModel
 import com.vescdash.ui.dash.WidgetBody
+import com.vescdash.ui.theme.HeavyWideFont
 import com.vescdash.ui.theme.LocalWidgetTheme
 import com.vescdash.ui.theme.NumberStyle
 import com.vescdash.ui.theme.WideFont
@@ -63,6 +65,10 @@ internal fun CustomRide(vm: MainViewModel, d: RideData, c: RidePalette, onCycleM
             RideLayoutView(vm, layout, d, c, Modifier.fillMaxSize(), intro)
 
             TapTarget(layout.modePill.toRect(w, h), enabled = true, onClick = onCycleMode)
+            // Arms an accel timer; only at a stop, so a stray tap mid-ride can't wipe the last result.
+            layout.items.filter { it.widget.type == WidgetType.ACCEL }.forEach { item ->
+                TapTarget(item.rect.toRect(w, h), enabled = d.stopped) { vm.armAccel(item.widget) }
+            }
             // Centre-right, like the other styles, and only while stopped.
             HomeButton(d.stopped, Offset(0.92f * w, 0.6f * h), 0.17f * h, c, onHome)
             RideRoundButton(
@@ -91,6 +97,7 @@ internal fun RideLayoutView(
     val telemetry by vm.telemetry.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
     val vehicle by vm.vehicle.collectAsStateWithLifecycle()
+    val accel by vm.accel.collectAsStateWithLifecycle()
     val theme = remember(c) { c.widgetTheme() }
     val measurer = rememberTextMeasurer()
     val icons = rememberRideIcons()
@@ -123,7 +130,7 @@ internal fun RideLayoutView(
                                 .clip(RoundedCornerShape(minOf(width * item.rect.w, height * item.rect.h) * CARD_CORNER))
                                 .background(theme.surface),
                         ) {
-                            WidgetBody(item.widget, telemetry, history, vehicle.historySamples, vehicle)
+                            WidgetBody(item.widget, telemetry, history, vehicle.historySamples, vehicle, accel)
                         }
                     }
                 }
@@ -178,8 +185,9 @@ private fun RidePalette.widgetTheme() = WidgetTheme(
     outline = track,
     warn = amber,
     danger = red,
-    // Michroma has one weight, so don't let the widgets' Black weight fake a bold.
-    number = NumberStyle.copy(fontFamily = WideFont, fontSynthesis = FontSynthesis.None),
+    // Michroma has one weight, so don't let the widgets' Black weight fake a bold. Stark sets the digits heavier and glowing.
+    number = NumberStyle.copy(fontFamily = if (stark) HeavyWideFont else WideFont, fontSynthesis = FontSynthesis.None),
     label = TextStyle(fontFamily = WideFont, fontWeight = FontWeight.Normal, fontSynthesis = FontSynthesis.None, letterSpacing = 0.05.em),
     scaleToBox = true,
+    glow = stark,
 )

@@ -268,6 +268,29 @@ private fun StarkModeEditor(
                 ) { draft = draft.copy(powerCapKw = it.toDouble()) }
             }
 
+            var showAdvanced by remember(mode.id) { mutableStateOf(advancedFields(mode, vehicle) {}.any { it.enabled }) }
+            Text(
+                if (showAdvanced) "HIDE ADVANCED" else "SHOW ADVANCED",
+                modifier = Modifier.clip(CircleShape).clickable { showAdvanced = !showAdvanced }.padding(horizontal = 12.dp, vertical = 8.dp),
+                color = Palette.TextDim,
+                fontFamily = WideFont,
+                fontSize = 10.sp,
+                letterSpacing = 1.sp,
+            )
+            if (showAdvanced) {
+                advancedFields(draft, vehicle) { draft = it }.chunked(2).forEach { pair ->
+                    Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        pair.forEach { f ->
+                            LimitCard(
+                                Modifier.weight(1f).fillMaxHeight(), f.title, f.help, f.enabled, f.valueText,
+                                f.value, f.min, f.max, f.step, c, onToggle = f.onToggle, onValue = f.onValue,
+                            )
+                        }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+
             SafetyNote()
             Spacer(Modifier.height(64.dp))
         }

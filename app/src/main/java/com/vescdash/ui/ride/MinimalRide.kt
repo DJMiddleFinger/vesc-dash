@@ -18,7 +18,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
+import com.vescdash.ui.theme.HeavyWideFont
 import kotlin.math.roundToInt
 
 /**
@@ -64,9 +66,9 @@ internal fun MinimalRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
             // Battery: outlined cell with fill, then the percentage
             val pctText = buildAnnotatedString {
                 append(d.battery?.roundToInt()?.toString() ?: "--")
-                appendUnit(" %", (0.05f * h).toSp())
+                appendUnit(" %", (0.05f * h).toSp(), family = if (c.stark) HeavyWideFont else FontFamily.Default)
             }
-            val pctStyle = wide(0.075f * h, if (d.battery == null) c.label else c.text)
+            val pctStyle = digits(c, 0.075f * h, if (d.battery == null) c.label else c.text)
             val pctWidth = measurer.measure(pctText, pctStyle).size.width
             val bw = 0.12f * w
             val bh = 0.07f * h
@@ -91,9 +93,9 @@ internal fun MinimalRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
             val time = ridingTimeText(
                 d.rideTimeMs,
                 big = SpanStyle(fontSize = (0.075f * h).toSp(), color = c.text),
-                small = SpanStyle(fontSize = (0.036f * h).toSp(), color = c.textSoft),
+                small = SpanStyle(fontSize = (0.036f * h).toSp(), color = c.textSoft, fontFamily = if (c.stark) HeavyWideFont else null),
             )
-            drawCentered(measurer, time, wide(0.075f * h, c.text), Offset(0.965f * w, topY), alignX = 1f)
+            drawCentered(measurer, time, digits(c, 0.075f * h, c.text), Offset(0.965f * w, topY), alignX = 1f)
         }
 
         // Speed
@@ -109,8 +111,8 @@ internal fun MinimalRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, o
         ) {
             val speedY = 0.5f * h
             val value = d.speed?.roundToInt()?.toString() ?: "--"
-            drawCentered(measurer, AnnotatedString(value), wide(0.46f * h, if (d.speed == null) c.label else c.text), Offset(cx, speedY))
-            drawCentered(measurer, AnnotatedString(d.speedUnit), wide(0.05f * h, c.label, 0.08f), Offset(cx, speedY + 0.29f * h))
+            drawCentered(measurer, AnnotatedString(value), digits(c, 0.46f * h, if (d.speed == null) c.label else c.speed), Offset(cx, speedY))
+            drawCentered(measurer, AnnotatedString(d.speedUnit), wide(0.05f * h, c.unit, 0.08f), Offset(cx, speedY + 0.29f * h))
         }
 
         // Power / regen bar and warnings

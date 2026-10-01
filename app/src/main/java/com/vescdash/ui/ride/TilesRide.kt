@@ -87,17 +87,17 @@ internal fun TilesRide(d: RideData, c: RidePalette, onCycleMode: () -> Unit, onH
             drawRoundRect(c.tilePill, modePill.topLeft, modePill.size, CornerRadius(modePill.height / 2f))
             drawRoundRect(pillBorderColor(d.modeStatus, c), modePill.topLeft, modePill.size, CornerRadius(modePill.height / 2f), style = Stroke(0.004f * h))
             drawIcon(icons.bolt, Offset(modePill.left + modePill.width * 0.32f, modePill.center.y), 0.1f * h, d.modeColor ?: c.green)
-            drawCentered(measurer, AnnotatedString(d.modeNumber.toString()), wide(0.105f * h, c.text), Offset(modePill.left + modePill.width * 0.62f, modePill.center.y))
+            drawCentered(measurer, AnnotatedString(d.modeNumber.toString()), digits(c, 0.105f * h, c.text), Offset(modePill.left + modePill.width * 0.62f, modePill.center.y))
 
             // Speed in the centre tile, unit underneath
             drawCentered(
                 measurer, AnnotatedString(d.speed?.roundToInt()?.toString() ?: "--"),
-                wide(0.16f * h, if (d.speed == null) c.label else c.text),
+                digits(c, 0.16f * h, if (d.speed == null) c.label else c.speed),
                 Offset(strip.center.x, strip.top + strip.height * 0.43f),
             )
             drawCentered(
                 measurer, AnnotatedString(d.speedUnit),
-                wide(0.036f * h, c.label, 0.08f),
+                wide(0.036f * h, c.unit, 0.08f),
                 Offset(strip.center.x, strip.top + strip.height * 0.84f),
             )
 
@@ -159,7 +159,7 @@ private fun DrawScope.drawBatteryPill(m: TextMeasurer, c: RidePalette, battery: 
     drawRect(ink, Offset(gx + gh * 0.18f, gy + gh * 0.22f), Size((gw - gh * 0.36f) * ((battery ?: 0.0) / 100.0).toFloat().coerceIn(0.1f, 1f), gh * 0.56f))
     drawCentered(
         m, AnnotatedString(battery?.roundToInt()?.toString() ?: "--"),
-        wide(ph * 0.62f, ink),
+        digits(c, ph * 0.62f, ink),
         Offset(pill.left + pw * 0.6f, center.y),
     )
 }

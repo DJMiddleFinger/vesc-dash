@@ -37,6 +37,7 @@ import com.vescdash.data.WidgetSize
 import com.vescdash.data.WidgetType
 import com.vescdash.data.defaultRange
 import com.vescdash.data.defaultThresholds
+import com.vescdash.data.speedUnit
 import com.vescdash.data.unit
 import com.vescdash.ui.common.AppButton
 import com.vescdash.ui.common.AppChip
@@ -69,6 +70,9 @@ fun WidgetEditorSheet(
     var maxText by remember { mutableStateOf(base.max.toFieldText()) }
     var warnText by remember { mutableStateOf(base.warn.toFieldText()) }
     var dangerText by remember { mutableStateOf(base.danger.toFieldText()) }
+    var targetsText by remember { mutableStateOf(base.targets.joinToString(", ") { it.toFieldText() }) }
+    val accel = type == WidgetType.ACCEL
+    val targetTokens = targetsText.split(Regex("[,\\s]+")).filter { it.isNotEmpty() }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val range = metric.defaultRange(vehicle)
@@ -78,7 +82,8 @@ fun WidgetEditorSheet(
     val appearanceSection: @Composable () -> Unit = {
         SectionLabel("STYLE")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            WidgetType.entries.forEach { t ->
+            // The accel timer needs the ride screen's tap target, which the Dash tab (the one with a size) lacks.
+            WidgetType.entries.filter { it != WidgetType.ACCEL || !showSize }.forEach { t ->
                 AppChip(type == t, t.label, onClick = { type = t })
             }
         }
@@ -91,23 +96,25 @@ fun WidgetEditorSheet(
             }
         }
 
-        SectionLabel("DATA")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Metric.entries.forEach { m ->
-                AppChip(
-                    metric == m,
-                    m.label,
-                    onClick = {
-                        if (metric != m) {
-                            metric = m
-                            val th = m.defaultThresholds()
-                            warnText = th?.first.toFieldText()
-                            dangerText = th?.second.toFieldText()
-                            minText = ""
-                            maxText = ""
-                        }
-                    },
-                )
+        if (!accel) {
+            SectionLabel("DATA")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Metric.entries.forEach { m ->
+                    AppChip(
+                        metric == m,
+                        m.label,
+                        onClick = {
+                            if (metric != m) {
+                                metric = m
+                                val th = m.defaultThresholds()
+                                warnText = th?.first.toFieldText()
+                                dangerText = th?.second.toFieldText()
+                                minText = ""
+                                maxText = ""
+                            }
+                        },
+                    )
+                }
             }
         }
     }
@@ -118,30 +125,49 @@ fun WidgetEditorSheet(
             onValueChange = { label = it.take(20) },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Custom label (optional)") },
-            placeholder = { Text(metric.label) },
+            placeholder = { Text(if (accel) "Accel" else metric.label) },
             singleLine = true,
             colors = appTextFieldColors(),
         )
 
-        SectionLabel("SCALE  ·  ${metric.unit(vehicle)}")
-        Row {
-            NumField("Min", minText, range.start.toFieldText(), Modifier.weight(1f)) { minText = it }
-            Spacer(Modifier.width(10.dp))
-            NumField("Max", maxText, range.endInclusive.toFieldText(), Modifier.weight(1f)) { maxText = it }
-        }
-        Text("Blank = automatic for your vehicle.", color = Palette.TextDim, fontSize = 12.sp)
+        if (accel) {
+            OutlinedTextField(
+                value = targetsText,
+                onValueChange = { targetsText = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Target speeds · ${speedUnit(vehicle)}") },
+                placeholder = { Text("30") },
+                singleLine = true,
+                isError = targetTokens.any { it.toDoubleOrNull() == null },
+                colors = appTextFieldColors(),
+            )
+            Text(
+                "Several are timed in one run, e.g. 30, 60. Tap the widget on the ride screen while stopped, then go: " +
+                    "timing starts as you pass 1 ${speedUnit(vehicle)} and the result stays until you tap again.",
+                color = Palette.TextDim,
+                fontSize = 12.sp,
+            )
+        } else {
+            SectionLabel("SCALE  ·  ${metric.unit(vehicle)}")
+            Row {
+                NumField("Min", minText, range.start.toFieldText(), Modifier.weight(1f)) { minText = it }
+                Spacer(Modifier.width(10.dp))
+                NumField("Max", maxText, range.endInclusive.toFieldText(), Modifier.weight(1f)) { maxText = it }
+            }
+            Text("Blank = automatic for your vehicle.", color = Palette.TextDim, fontSize = 12.sp)
 
-        SectionLabel("ALERT COLORS")
-        Row {
-            NumField("Warning", warnText, "off", Modifier.weight(1f)) { warnText = it }
-            Spacer(Modifier.width(10.dp))
-            NumField("Danger", dangerText, "off", Modifier.weight(1f)) { dangerText = it }
+            SectionLabel("ALERT COLORS")
+            Row {
+                NumField("Warning", warnText, "off", Modifier.weight(1f)) { warnText = it }
+                Spacer(Modifier.width(10.dp))
+                NumField("Danger", dangerText, "off", Modifier.weight(1f)) { dangerText = it }
+            }
+            Text(
+                "Turns amber at Warning and red at Danger. Set Danger lower than Warning for values where low is bad, like battery.",
+                color = Palette.TextDim,
+                fontSize = 12.sp,
+            )
         }
-        Text(
-            "Turns amber at Warning and red at Danger. Set Danger lower than Warning for values where low is bad, like battery.",
-            color = Palette.TextDim,
-            fontSize = 12.sp,
-        )
     }
 
     ModalBottomSheet(
@@ -189,13 +215,14 @@ fun WidgetEditorSheet(
                             DashWidget(
                                 id = base.id,
                                 type = type,
-                                metric = metric,
+                                metric = if (accel) Metric.SPEED else metric,
                                 size = size,
                                 min = minText.toDoubleOrNull(),
                                 max = maxText.toDoubleOrNull(),
                                 warn = warnText.toDoubleOrNull(),
                                 danger = dangerText.toDoubleOrNull(),
                                 label = label.trim().ifBlank { null },
+                                targets = if (accel) targetTokens.mapNotNull { it.toDoubleOrNull() } else emptyList(),
                             ),
                         )
                     },

@@ -4,11 +4,14 @@ package com.vescdash.vesc
 object CommPacketId {
     const val FW_VERSION = 0
     const val GET_VALUES = 4
+    const val GET_APPCONF = 17
     const val FORWARD_CAN = 34
     const val SET_MCCONF_TEMP = 48
+    const val SET_APPCONF_NO_STORE = 149
 }
 
-data class FwVersion(val major: Int, val minor: Int, val hardware: String) {
+/** [uuid] is the controller's 12-byte chip id as hex, when the firmware reports it. */
+data class FwVersion(val major: Int, val minor: Int, val hardware: String, val uuid: String? = null) {
     override fun toString() = "$major.${minor.toString().padStart(2, '0')}" + if (hardware.isNotBlank()) " · $hardware" else ""
 }
 
@@ -79,12 +82,42 @@ object VescProtocol {
         .f32Auto(l.batteryCurrentMax)
         .build()
 
+    fun getAppconf(): ByteArray = byteArrayOf(CommPacketId.GET_APPCONF.toByte())
+
+    // App-config layout (offsets into the serialized blob) shared by firmware 6.00, 6.02, 6.05 and master.
+    // ponytail: ADC app only, and only these firmware signatures; add a signature when its layout is checked.
+    private val APPCONF_SIGNATURES = setOf(486554156L, 2099347128L, 296593100L)
+    private val ADC_APPS = setOf(2, 5) // app_to_use: ADC, ADC + UART
+    private const val APP_TO_USE = 33
+    private const val ADC_THROTTLE_EXP = 114
+    private const val ADC_RAMP_UP = 123
+    private const val ADC_RAMP_DOWN = 127
+
+    /**
+     * Turns a COMM_GET_APPCONF [reply] into a COMM_SET_APPCONF_NO_STORE (RAM only, like the mode
+     * limits) with the ADC throttle curve exponent and ramp times replaced. Null when the firmware
+     * layout isn't recognised or the ADC app isn't in use, so nothing unknown is ever written.
+     */
+    fun adcThrottleSet(reply: ByteArray, exp: Double, rampUpS: Double, rampDownS: Double): ByteArray? {
+        if (reply.size < 1 + ADC_RAMP_DOWN + 4) return null
+        val signature = PayloadReader(reply, 1).i32().toLong() and 0xFFFFFFFFL
+        if (signature !in APPCONF_SIGNATURES || (reply[1 + APP_TO_USE].toInt() and 0xFF) !in ADC_APPS) return null
+        val out = reply.copyOf()
+        out[0] = CommPacketId.SET_APPCONF_NO_STORE.toByte()
+        fun put(at: Int, v: Double) = PayloadWriter().f32Auto(v).build().copyInto(out, 1 + at)
+        put(ADC_THROTTLE_EXP, exp)
+        put(ADC_RAMP_UP, rampUpS)
+        put(ADC_RAMP_DOWN, rampDownS)
+        return out
+    }
+
     fun parseFwVersion(p: ByteArray): FwVersion? = try {
         val r = PayloadReader(p, 1)
         val major = r.u8()
         val minor = r.u8()
         val hw = if (r.remaining > 0) r.cString() else ""
-        FwVersion(major, minor, hw)
+        val uuid = if (r.remaining >= 12) ByteArray(12) { r.u8().toByte() }.joinToString("") { "%02X".format(it) } else null
+        FwVersion(major, minor, hw, uuid)
     } catch (e: IndexOutOfBoundsException) {
         null
     }

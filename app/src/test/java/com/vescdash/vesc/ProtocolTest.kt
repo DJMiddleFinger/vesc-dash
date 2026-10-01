@@ -3,6 +3,7 @@ package com.vescdash.vesc
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ProtocolTest {
@@ -95,5 +96,41 @@ class ProtocolTest {
         assertEquals(25.0, v.wattHours, 1e-9)
         assertEquals(5000, v.tachometerAbs)
         assertEquals(3, v.controllerId)
+    }
+
+    @Test
+    fun fwVersionCarriesTheControllerUuid() {
+        val uuid = ByteArray(12) { (0xA0 + it).toByte() }
+        val p = PayloadWriter().u8(CommPacketId.FW_VERSION).u8(6).u8(5).bytes("HW\u0000".toByteArray()).bytes(uuid).u8(0).build()
+        val fw = VescProtocol.parseFwVersion(p)!!
+        assertEquals("HW", fw.hardware)
+        assertEquals("A0A1A2A3A4A5A6A7A8A9AAAB", fw.uuid)
+        assertNull(VescProtocol.parseFwVersion(byteArrayOf(0, 6, 5, 'H'.code.toByte(), 0))!!.uuid)
+    }
+
+    /** A COMM_GET_APPCONF reply: [id][signature][...], filled with a pattern so untouched bytes are noticed. */
+    private fun appconfReply(signature: Long, app: Int) = ByteArray(150) { (it * 7).toByte() }.also { b ->
+        b[0] = CommPacketId.GET_APPCONF.toByte()
+        for (i in 0..3) b[1 + i] = (signature shr (24 - 8 * i)).toByte()
+        b[1 + 33] = app.toByte()
+    }
+
+    @Test
+    fun adcThrottleSetChangesOnlyTheThreeFields() {
+        val reply = appconfReply(486554156L, app = 2)
+        val out = VescProtocol.adcThrottleSet(reply, -0.5, 0.2, 0.1)!!
+        assertEquals(CommPacketId.SET_APPCONF_NO_STORE, out[0].toInt() and 0xFF)
+        assertEquals(-0.5f, PayloadReader(out, 1 + 114).f32Auto())
+        assertEquals(0.2f, PayloadReader(out, 1 + 123).f32Auto())
+        assertEquals(0.1f, PayloadReader(out, 1 + 127).f32Auto())
+        val patched = (115 until 119) + (124 until 128) + (128 until 132)
+        for (i in 1 until out.size) if (i !in patched) assertEquals("byte $i", reply[i], out[i])
+    }
+
+    @Test
+    fun adcThrottleSetRefusesWhatItDoesNotKnow() {
+        assertNull(VescProtocol.adcThrottleSet(appconfReply(1234L, app = 2), 0.0, 0.3, 0.1)) // unknown firmware layout
+        assertNull(VescProtocol.adcThrottleSet(appconfReply(2099347128L, app = 1), 0.0, 0.3, 0.1)) // PPM, not ADC
+        assertNull(VescProtocol.adcThrottleSet(ByteArray(10), 0.0, 0.3, 0.1)) // truncated reply
     }
 }

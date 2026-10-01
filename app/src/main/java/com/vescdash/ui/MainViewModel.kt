@@ -12,6 +12,7 @@ import com.vescdash.data.DriveMode
 import com.vescdash.data.RideLayout
 import com.vescdash.data.VehicleSettings
 import com.vescdash.data.WidgetSize
+import com.vescdash.data.accelTargets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,8 +38,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val dashboards = repo.dashboards
     val rideLayout = repo.rideLayout
     val lastDevice = repo.lastDevice
+    val profileName = repo.profileName
+    val newController = repo.newController
+    val throttleNote = repo.throttleNote
     val demoActive = repo.demoActive
     val rideTimeMs = repo.rideTimeMs
+    val accel = repo.accel
 
     // ---- scanning ---------------------------------------------------------
 
@@ -107,6 +112,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return mode.id
     }
 
+    // ---- controller profiles ------------------------------------------------
+
+    fun adoptController(fresh: Boolean) = repo.adoptController(fresh)
+    fun renameProfile(name: String) = repo.renameProfile(name)
+
     // ---- vehicle ----------------------------------------------------------
 
     fun updateVehicle(f: (VehicleSettings) -> VehicleSettings) =
@@ -168,4 +178,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun saveRideLayout(layout: RideLayout) = repo.updateRideLayout { layout }
+
+    fun armAccel(w: DashWidget) = repo.armAccel(w.id, w.accelTargets())
 }

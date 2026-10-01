@@ -23,13 +23,17 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
+
+private const val LOCAL = -1
 
 sealed interface ModeApplyStatus {
     data object Idle : ModeApplyStatus
@@ -37,6 +41,9 @@ sealed interface ModeApplyStatus {
     data class Applied(val modeId: String) : ModeApplyStatus
     data class Failed(val modeId: String) : ModeApplyStatus
 }
+
+/** A controller we haven't saved settings for yet; the user chooses whether it starts from the current settings. */
+data class NewController(val key: String, val name: String)
 
 /**
  * Owns the VESC link: frames packets, polls telemetry, applies drive modes and
@@ -58,6 +65,16 @@ class VescRepository(
     val dashboards: StateFlow<List<Dashboard>> = store.dashboards.stateIn(scope, SharingStarted.Eagerly, Defaults.dashboards)
     val rideLayout: StateFlow<RideLayout> = store.rideLayout.stateIn(scope, SharingStarted.Eagerly, Defaults.rideLayout)
     val lastDevice: StateFlow<String?> = store.lastDevice.stateIn(scope, SharingStarted.Eagerly, null)
+    val profileName: StateFlow<String?> = store.profileName.stateIn(scope, SharingStarted.Eagerly, null)
+
+    private val _newController = MutableStateFlow<NewController?>(null)
+    /** Set while a controller with no saved settings waits for the user's choice; its mode isn't applied until then. */
+    val newController: StateFlow<NewController?> = _newController.asStateFlow()
+
+    private val _throttleNote = MutableStateFlow<String?>(null)
+    /** Why the last throttle change didn't go through, if it didn't. */
+    val throttleNote: StateFlow<String?> = _throttleNote.asStateFlow()
+    private val lastThrottle = ConcurrentHashMap<Int, Triple<Double, Double, Double>>()
 
     private val _telemetry = MutableStateFlow<Telemetry?>(null)
     val telemetry: StateFlow<Telemetry?> = _telemetry.asStateFlow()
@@ -86,6 +103,14 @@ class VescRepository(
     private val _rideTimeMs = MutableStateFlow(0L)
     /** Time spent moving since the app started. */
     val rideTimeMs: StateFlow<Long> = _rideTimeMs.asStateFlow()
+
+    private val _accel = MutableStateFlow(AccelRun())
+    /** The latest standing-start timing run, shown by the Custom ride screen's accel widget. */
+    val accel: StateFlow<AccelRun> = _accel.asStateFlow()
+
+    fun armAccel(id: String, targets: List<Double>) {
+        _accel.value = AccelRun.armed(id, targets)
+    }
 
     private val historyBuf = ArrayDeque<Telemetry>()
     private val batteryEstimator = BatteryEstimator()
@@ -182,7 +207,9 @@ class VescRepository(
             _firmware.value = request(VescProtocol.fwVersion(), CommPacketId.FW_VERSION, 1_500)
                 ?.let(VescProtocol::parseFwVersion)
 
-            if (vehicle.value.applyModeOnConnect) activeMode()?.let { applyMode(it) }
+            lastThrottle.clear()
+            val ready = loadControllerSettings()
+            if (ready && vehicle.value.applyModeOnConnect) activeMode()?.let { applyMode(it) }
 
             var misses = 0
             while (isActive) {
@@ -215,6 +242,7 @@ class VescRepository(
     private fun stopPolling() {
         pollJob?.cancel()
         pollJob = null
+        _newController.value = null
         _telemetry.value = null
         _stale.value = false
     }
@@ -235,6 +263,8 @@ class VescRepository(
             _rideTimeMs.value += (t.timeMs - prev.timeMs).coerceIn(0L, 2_000L)
         }
         _telemetry.value = t
+        // update, not read-then-write: arming comes from the UI thread.
+        _accel.update { it.step(t.timeMs, Metric.SPEED.value(t, v) ?: 0.0) }
         synchronized(historyBuf) {
             historyBuf.addLast(t)
             while (historyBuf.size > v.historySamples) historyBuf.removeFirst()
@@ -246,6 +276,51 @@ class VescRepository(
         batteryEstimator.reset()
         historyBuf.clear()
         _history.value = emptyList()
+    }
+
+    // ---- per-controller settings -------------------------------------------
+
+    /** Switches to the settings saved for the connected controller. False if it's new and the user must choose first. */
+    private suspend fun loadControllerSettings(): Boolean {
+        val address = (transport.state.value as? VescBleTransport.State.Connected)?.address ?: return true
+        val fw = _firmware.value
+        val key = fw?.uuid ?: address
+        val name = "${fw?.hardware?.ifBlank { null } ?: "VESC"} · ${key.filter { it != ':' }.takeLast(4)}"
+        return when (store.matchController(key)) {
+            ControllerMatch.ACTIVE -> true
+            ControllerMatch.NEW -> {
+                _newController.value = NewController(key, name)
+                false
+            }
+            // FIRST claims the settings already on the phone for this controller; KNOWN swaps in its own.
+            else -> {
+                activate(key, name, fresh = false)
+                true
+            }
+        }
+    }
+
+    private suspend fun activate(key: String, name: String, fresh: Boolean) {
+        val shown = store.activateProfile(key, name, fresh)
+        // The settings flows catch up a moment after the write; wait so the mode applied next is the new one.
+        withTimeoutOrNull(2_000) {
+            vehicle.first { it == shown.vehicle }
+            modes.first { it == shown.modes }
+        }
+    }
+
+    /** The user's answer for a [newController]: start from the current settings, or from defaults. */
+    fun adoptController(fresh: Boolean) {
+        val c = _newController.value ?: return
+        _newController.value = null
+        scope.launch {
+            activate(c.key, c.name, fresh)
+            if (isConnected && vehicle.value.applyModeOnConnect) activeMode()?.let { applyMode(it) }
+        }
+    }
+
+    fun renameProfile(name: String) {
+        scope.launch { store.renameProfile(name.trim()) }
     }
 
     // ---- demo -------------------------------------------------------------
@@ -305,8 +380,27 @@ class VescRepository(
             forwardCan = v.dualController,
         )
         val ok = request(payload, CommPacketId.SET_MCCONF_TEMP, 1_500) != null
+        if (ok && v.throttleControl) applyThrottle(mode, v)
         _modeStatus.value = if (ok) ModeApplyStatus.Applied(mode.id) else ModeApplyStatus.Failed(mode.id)
         return ok
+    }
+
+    /**
+     * Sets the ADC throttle curve and ramps for [mode] (RAM only, like the limits above). Only sends
+     * when they differ from what this connection last sent, since the VESC restarts its ADC app on every write.
+     */
+    private suspend fun applyThrottle(mode: DriveMode, v: VehicleSettings) {
+        val want = Triple(mode.throttleExp ?: v.throttleExp, mode.rampUpS ?: v.rampUpS, mode.rampDownS ?: v.rampDownS)
+        for (target in if (v.dualController) listOf(LOCAL, v.canSlaveId) else listOf(LOCAL)) {
+            if (lastThrottle[target] == want) continue
+            fun wrap(p: ByteArray) = if (target == LOCAL) p else VescProtocol.forwardCan(target, p)
+            val set = request(wrap(VescProtocol.getAppconf()), CommPacketId.GET_APPCONF, 1_500)
+                ?.let { VescProtocol.adcThrottleSet(it, want.first, want.second, want.third) }
+            val ok = set != null && request(wrap(set), CommPacketId.SET_APPCONF_NO_STORE, 1_500) != null
+            _throttleNote.value = if (ok) null else "Throttle control needs the ADC app on VESC firmware 6.00 or newer. Nothing was changed."
+            if (!ok) return
+            lastThrottle[target] = want
+        }
     }
 
     fun selectMode(id: String) {
@@ -318,6 +412,7 @@ class VescRepository(
     }
 
     fun reapplyActiveMode() {
+        lastThrottle.clear()
         scope.launch { if (isConnected) activeMode()?.let { applyMode(it) } }
     }
 

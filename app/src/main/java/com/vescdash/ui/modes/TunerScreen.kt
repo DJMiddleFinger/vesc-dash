@@ -203,6 +203,24 @@ fun TunerScreen(
                 onValue = { draft = draft.copy(powerCapKw = (it * 2).roundToInt() / 2.0) },
             )
 
+            var showAdvanced by remember(mode.id) { mutableStateOf(advancedFields(mode, vehicle) {}.any { it.enabled }) }
+            TextButton(onClick = { showAdvanced = !showAdvanced }) { Text(if (showAdvanced) "HIDE ADVANCED" else "SHOW ADVANCED") }
+            if (showAdvanced) {
+                advancedFields(draft, vehicle) { draft = it }.forEach { f ->
+                    LimitSlider(
+                        title = f.title.uppercase(),
+                        enabled = f.enabled,
+                        valueText = f.valueText,
+                        help = f.help,
+                        value = f.value,
+                        range = f.min..f.max,
+                        color = c,
+                        onToggle = f.onToggle,
+                        onValue = f.onValue,
+                    )
+                }
+            }
+
             SafetyNote()
             Spacer(Modifier.height(4.dp))
         }

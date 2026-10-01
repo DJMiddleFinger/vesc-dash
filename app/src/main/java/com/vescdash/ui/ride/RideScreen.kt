@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.vescdash.data.AppAppearance
 import com.vescdash.data.KMH_TO_MPH
 import com.vescdash.data.RideStyle
 import com.vescdash.data.VehicleMath
@@ -41,10 +40,8 @@ fun RideScreen(vm: MainViewModel, onHome: () -> Unit) {
     val modes by vm.modes.collectAsStateWithLifecycle()
     val activeId by vm.activeModeId.collectAsStateWithLifecycle()
     val data = collectRideData(vm)
-    val stark = vehicle.appearance == AppAppearance.STARK
-    val themed = ridePalette(vehicle.rideTheme)
-    val palette = if (stark) RidePalette.Stark else themed
-    val rideStyle = if (stark) RideStyle.CLASSIC else vehicle.rideStyle
+    val palette = ridePalette(vehicle)
+    val rideStyle = vehicle.rideStyle
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val cycleMode = {

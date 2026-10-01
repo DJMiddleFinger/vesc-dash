@@ -50,23 +50,30 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vescdash.data.ACCEL_START
+import com.vescdash.data.AccelRun
 import com.vescdash.data.DashWidget
 import com.vescdash.data.Metric
 import com.vescdash.data.Telemetry
 import com.vescdash.data.VehicleSettings
 import com.vescdash.data.WidgetSize
 import com.vescdash.data.WidgetType
+import com.vescdash.data.accelTargets
 import com.vescdash.data.defaultRange
 import com.vescdash.data.format
 import com.vescdash.data.unit
 import com.vescdash.data.value
+import com.vescdash.ui.common.toFieldText
 import com.vescdash.ui.theme.LocalWidgetTheme
 import com.vescdash.ui.theme.Palette
 import com.vescdash.ui.theme.WidgetTheme
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 
@@ -83,7 +90,7 @@ data class ResolvedWidget(
 fun DashWidget.resolve(v: VehicleSettings): ResolvedWidget {
     val range = metric.defaultRange(v)
     return ResolvedWidget(
-        label = label?.takeIf { it.isNotBlank() } ?: metric.label,
+        label = label?.takeIf { it.isNotBlank() } ?: if (type == WidgetType.ACCEL) "Accel" else metric.label,
         unit = metric.unit(v),
         min = min ?: range.start,
         max = max ?: range.endInclusive,
@@ -112,6 +119,7 @@ fun widgetHeight(w: DashWidget) = when (w.type) {
     WidgetType.BAR -> 96.dp
     WidgetType.GRAPH -> 150.dp
     WidgetType.GAUGE -> if (w.size == WidgetSize.FULL) 240.dp else 180.dp
+    WidgetType.ACCEL -> 112.dp
 }
 
 @Composable
@@ -171,6 +179,7 @@ fun WidgetBody(
     history: List<Telemetry>,
     historyCapacity: Int,
     vehicle: VehicleSettings,
+    accel: AccelRun = AccelRun(),
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val r = widget.resolve(vehicle)
@@ -180,6 +189,7 @@ fun WidgetBody(
         WidgetType.GAUGE -> GaugeWidget(r, widget.metric, value, accent)
         WidgetType.BAR -> BarWidget(r, widget.metric, value, accent)
         WidgetType.GRAPH -> GraphWidget(widget, r, value, history, historyCapacity, vehicle, accent)
+        WidgetType.ACCEL -> AccelWidget(widget, r, value, accel)
     }
 }
 
@@ -190,17 +200,29 @@ private fun EditButton(icon: ImageVector, description: String, onClick: () -> Un
 }
 
 @Composable
-private fun WidgetLabel(text: String, modifier: Modifier = Modifier, size: TextUnit = 11.sp) {
+private fun WidgetLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    size: TextUnit = 11.sp,
+    color: Color = LocalWidgetTheme.current.dim,
+    tight: Boolean = false,
+) {
     val theme = LocalWidgetTheme.current
     Text(
         text.uppercase(),
         modifier = modifier,
-        color = theme.dim,
+        color = color,
         fontSize = size,
-        style = LocalTextStyle.current.merge(theme.label),
+        style = LocalTextStyle.current.merge(theme.label).let { if (tight) it.tightTo(size) else it },
         maxLines = 1,
     )
 }
+
+/** The wide face has a very tall line box; this makes it only as tall as [size], for text that has to share a small widget. */
+private fun TextStyle.tightTo(size: TextUnit) = copy(
+    lineHeight = size,
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+)
 
 @Composable
 private fun NumberWidget(r: ResolvedWidget, metric: Metric, value: Double?, big: Boolean) {
@@ -243,6 +265,62 @@ private fun NumberWidget(r: ResolvedWidget, metric: Metric, value: Double?, big:
                 )
             }
             if (theme.scaleToBox) Spacer(Modifier.weight(1f))
+        }
+    }
+}
+
+/** [speed] is the live speed: the widget only invites a tap while stopped. [accel] counts if it's this widget's run. */
+@Composable
+private fun AccelWidget(widget: DashWidget, r: ResolvedWidget, speed: Double?, accel: AccelRun) {
+    val theme = LocalWidgetTheme.current
+    val run = accel.takeIf { it.id == widget.id } ?: AccelRun()
+    val targets = run.targets.ifEmpty { widget.accelTargets() }
+    val armed = run.state == AccelRun.State.ARMED
+    val running = run.state == AccelRun.State.RUNNING
+    val status = when {
+        armed -> "READY"
+        !running && (speed == null || speed < ACCEL_START) -> "TAP TO ARM"
+        else -> ""
+    }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val u = minOf(maxWidth.value, maxHeight.value)
+        val padH = theme.scale(16f, u, 0.1f)
+        val padV = theme.scale(12f, u, 0.08f)
+        val labelSize = theme.labelSize(u, 0.11f)
+        val rowH = (maxHeight.value - 2 * padV - labelSize) / targets.size
+        val width = maxWidth.value
+        val rangeSize = (0.2f * rowH).coerceIn(9f, 13f)
+        Column(Modifier.fillMaxSize().padding(horizontal = padH.dp, vertical = padV.dp)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                WidgetLabel(r.label, Modifier.weight(1f), labelSize.sp, tight = true)
+                WidgetLabel(status, size = labelSize.sp, color = if (armed) theme.warn else theme.dim, tight = true)
+            }
+            targets.forEachIndexed { i, target ->
+                // Reached: the split. Being chased: the clock, ticking with each sample. Otherwise nothing yet.
+                val ms = run.splitsMs.getOrNull(i) ?: if (running && i == run.splitsMs.size) run.last?.let { it.first - run.startMs } else null
+                val text = ms?.let { String.format(Locale.US, "%.2f", it / 1000.0) } ?: "--"
+                // The wide face runs about 0.95 em a digit.
+                val numberSize = min(0.5f * rowH, (width - 2 * padH - 2 * rangeSize) / (max(4, text.length) * 0.95f))
+                Column(
+                    Modifier.fillMaxWidth().weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    WidgetLabel("0–${target.toFieldText()} ${r.unit}", size = rangeSize.sp, tight = true)
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text,
+                            style = theme.number.tightTo(numberSize.sp),
+                            color = if (ms == null) theme.dim else theme.fg,
+                            fontSize = numberSize.sp,
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                        )
+                        Spacer(Modifier.width(theme.scale(4f, u, 0.04f).dp))
+                        Text("s", color = theme.dim, fontSize = rangeSize.sp, style = LocalTextStyle.current.tightTo(rangeSize.sp))
+                    }
+                }
+            }
         }
     }
 }

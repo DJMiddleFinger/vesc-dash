@@ -35,12 +35,14 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -95,6 +97,7 @@ fun AppRoot(vm: MainViewModel) {
     val firmware by vm.firmware.collectAsStateWithLifecycle()
     val demoActive by vm.demoActive.collectAsStateWithLifecycle()
     val layoutEditorOpen by vm.layoutEditorOpen.collectAsStateWithLifecycle()
+    val newController by vm.newController.collectAsStateWithLifecycle()
     val telemetryState = vm.telemetry.collectAsStateWithLifecycle()
 
     val activeMode = modes.firstOrNull { it.id == activeId } ?: modes.firstOrNull()
@@ -261,6 +264,22 @@ fun AppRoot(vm: MainViewModel) {
         }
         if (showConnect && !showRide) ConnectSheet(vm, onDismiss = { showConnect = false })
         if (layoutEditorOpen) RideLayoutEditor(vm)
+        newController?.let { c ->
+            // A new vehicle must not get the last vehicle's base limits sent to it unseen, so the choice is required.
+            AlertDialog(
+                onDismissRequest = {},
+                containerColor = Palette.Dialog,
+                title = { Text("New controller") },
+                text = {
+                    Text(
+                        "${c.name} has no saved settings. Start from your current vehicle setup and modes, or from defaults? " +
+                            "Check Base limits in Setup before riding; the mode isn't applied until you choose.",
+                    )
+                },
+                confirmButton = { TextButton(onClick = { vm.adoptController(fresh = false) }) { Text("Copy current") } },
+                dismissButton = { TextButton(onClick = { vm.adoptController(fresh = true) }) { Text("Start fresh") } },
+            )
+        }
     }
 }
 

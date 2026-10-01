@@ -37,6 +37,7 @@ class LayoutGeometry(private val widthDp: Float, private val heightDp: Float) {
             WidgetType.GAUGE -> 200f to 200f
             WidgetType.BAR -> 240f to 64f
             WidgetType.GRAPH -> 320f to 110f
+            WidgetType.ACCEL -> 200f to 100f
         }
         val fw = w / widthDp
         val fh = h / heightDp

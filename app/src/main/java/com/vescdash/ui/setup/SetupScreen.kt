@@ -12,10 +12,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,6 +38,7 @@ import com.vescdash.ui.common.AppChip
 import com.vescdash.ui.common.Card
 import com.vescdash.ui.common.SettingNumber
 import com.vescdash.ui.common.SettingSwitch
+import com.vescdash.ui.common.appTextFieldColors
 import com.vescdash.ui.modes.fmtKw
 import com.vescdash.ui.ride.CONTROLLER_RED_C
 import com.vescdash.ui.ride.MOTOR_RED_C
@@ -46,6 +52,8 @@ fun SetupScreen(vm: MainViewModel) {
     val firmware by vm.firmware.collectAsStateWithLifecycle()
     val connection by vm.connection.collectAsStateWithLifecycle()
     val connected = connection as? VescBleTransport.State.Connected
+    val profileName by vm.profileName.collectAsStateWithLifecycle()
+    val throttleNote by vm.throttleNote.collectAsStateWithLifecycle()
     val stark = v.appearance == AppAppearance.STARK
 
     val appearanceCard: @Composable () -> Unit = {
@@ -105,24 +113,26 @@ fun SetupScreen(vm: MainViewModel) {
 
     val rideViewCard: @Composable () -> Unit = {
         Card(title = "RIDE VIEW  ·  LANDSCAPE") {
-            if (stark) {
-                Text("Opens by itself above 5 km/h, or tap RIDE in the side rail.", color = Palette.TextDim, fontSize = 12.sp)
-            } else {
-                Text("Turn the phone sideways to show it.", color = Palette.TextDim, fontSize = 12.sp)
-                Text("Style", color = Palette.Fg, fontSize = 15.sp)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RideStyle.entries.forEach { style ->
-                        AppChip(v.rideStyle == style, style.label) { vm.updateVehicle { it.copy(rideStyle = style) } }
-                    }
+            Text(
+                if (stark) "Opens by itself above 5 km/h, or tap RIDE in the side rail." else "Turn the phone sideways to show it.",
+                color = Palette.TextDim,
+                fontSize = 12.sp,
+            )
+            Text("Style", color = Palette.Fg, fontSize = 15.sp)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RideStyle.entries.forEach { style ->
+                    AppChip(v.rideStyle == style, style.label) { vm.updateVehicle { it.copy(rideStyle = style) } }
                 }
-                if (v.rideStyle == RideStyle.CUSTOM) {
-                    Text(
-                        "Drag widgets anywhere and pinch to resize them. You can also edit from the ride view while stopped.",
-                        color = Palette.TextDim,
-                        fontSize = 12.sp,
-                    )
-                    AppButton("Edit custom layout", onClick = vm::openLayoutEditor, modifier = Modifier.fillMaxWidth())
-                }
+            }
+            if (v.rideStyle == RideStyle.CUSTOM) {
+                Text(
+                    "Drag widgets anywhere and pinch to resize them. You can also edit from the ride view while stopped.",
+                    color = Palette.TextDim,
+                    fontSize = 12.sp,
+                )
+                AppButton("Edit custom layout", onClick = vm::openLayoutEditor, modifier = Modifier.fillMaxWidth())
+            }
+            if (!stark) {
                 Text("Theme", color = Palette.Fg, fontSize = 15.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RideTheme.entries.forEach { theme ->
@@ -208,8 +218,53 @@ fun SetupScreen(vm: MainViewModel) {
         }
     }
 
+    val throttleCard: @Composable () -> Unit = {
+        Card(title = "THROTTLE  ·  PER-MODE RESPONSE") {
+            SettingSwitch(
+                "Let modes change throttle response",
+                v.throttleControl,
+                "Adds throttle curve and ramp times to each mode's Advanced settings. Needs the ADC throttle on VESC firmware 6.00 or newer. " +
+                    "Changes last until the VESC is powered off; turning this off doesn't undo them.",
+            ) { on -> vm.updateVehicle { it.copy(throttleControl = on) } }
+            if (v.throttleControl) {
+                Text(
+                    "Enter your VESC Tool values (App Settings → ADC → General). Modes without their own value use these. " +
+                        "After a mode change that alters them, the VESC may need the throttle released for half a second before it responds.",
+                    color = Palette.TextDim,
+                    fontSize = 12.sp,
+                )
+                SettingNumber("Throttle exponent", v.throttleExp, -5.0..5.0, help = "0 = linear") { x ->
+                    vm.updateVehicle { it.copy(throttleExp = x) }
+                }
+                Row {
+                    SettingNumber("Ramp up", v.rampUpS, 0.0..5.0, Modifier.weight(1f), suffix = "s") { x ->
+                        vm.updateVehicle { it.copy(rampUpS = x) }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    SettingNumber("Ramp down", v.rampDownS, 0.0..5.0, Modifier.weight(1f), suffix = "s") { x ->
+                        vm.updateVehicle { it.copy(rampDownS = x) }
+                    }
+                }
+                throttleNote?.let { Text(it, color = Palette.Warn, fontSize = 12.sp) }
+            }
+        }
+    }
+
     val controllerCard: @Composable () -> Unit = {
         Card(title = "CONTROLLER") {
+            if (connected != null && profileName != null) {
+                // Commit on blur rather than per key, so the saved name coming back doesn't fight the typing.
+                var name by remember(profileName) { mutableStateOf(profileName.orEmpty()) }
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(24) },
+                    label = { Text("Saved settings for this controller") },
+                    singleLine = true,
+                    colors = appTextFieldColors(),
+                    supportingText = { Text("Vehicle setup and modes are saved per controller and load when you connect to it.") },
+                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused && name.isNotBlank() && name != profileName) vm.renameProfile(name) },
+                )
+            }
             SettingSwitch("Dual controller (CAN)", v.dualController, "Read and tune a second VESC over CAN") { on ->
                 vm.updateVehicle { it.copy(dualController = on) }
             }
@@ -266,6 +321,7 @@ fun SetupScreen(vm: MainViewModel) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     heatCard()
                     limitsCard()
+                    throttleCard()
                     controllerCard()
                     connectionCard()
                 }
@@ -277,6 +333,7 @@ fun SetupScreen(vm: MainViewModel) {
             batteryCard()
             heatCard()
             limitsCard()
+            throttleCard()
             controllerCard()
             connectionCard()
         }

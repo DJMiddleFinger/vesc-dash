@@ -41,6 +41,12 @@ data class VehicleSettings(
     /** Ride-view heat icons appear at these temperatures (°C). */
     val heatWarnControllerC: Double = 60.0,
     val heatWarnMotorC: Double = 60.0,
+    /** Modes may change the VESC's ADC throttle curve and ramps (RAM only). Needs the base values below. */
+    val throttleControl: Boolean = false,
+    /** Base throttle curve and ramp times, copied from VESC Tool; modes that don't override them use these. */
+    val throttleExp: Double = 0.0,
+    val rampUpS: Double = 0.3,
+    val rampDownS: Double = 0.1,
 ) {
     val controllers: Int get() = if (dualController) 2 else 1
     val nominalVoltage: Double get() = cellsSeries * 3.7
@@ -48,6 +54,28 @@ data class VehicleSettings(
     /** Samples kept for graph widgets: 30 s at the poll rate. */
     val historySamples: Int get() = 30 * pollHz.coerceIn(1, 30)
 }
+
+/** Phone-wide choices that stay put when [VehicleSettings] are swapped for another controller's. */
+fun VehicleSettings.keepingAppSettings(app: VehicleSettings) = copy(
+    appearance = app.appearance,
+    rideStyle = app.rideStyle,
+    rideTheme = app.rideTheme,
+    launchAnimation = app.launchAnimation,
+    keepScreenOn = app.keepScreenOn,
+    demoMode = app.demoMode,
+    pollHz = app.pollHz,
+    imperial = app.imperial,
+    applyModeOnConnect = app.applyModeOnConnect,
+)
+
+/** Everything saved per VESC controller: its vehicle setup, drive modes and the active mode. */
+@Serializable
+data class Profile(
+    val name: String,
+    val vehicle: VehicleSettings = VehicleSettings(),
+    val modes: List<DriveMode> = Defaults.modes,
+    val activeModeId: String? = null,
+)
 
 /** How the whole app looks. Stark Varg is a landscape-only, unofficial lookalike of the Stark Varg phone app. */
 @Serializable
@@ -84,6 +112,19 @@ data class DriveMode(
     val topSpeedKmh: Double? = null,
     /** Null = no power cap. */
     val powerCapKw: Double? = null,
+    // Advanced. Null = follow the basic setting (or the base value in Setup).
+    /** Battery current as a % of base; null follows [powerPct]. */
+    val batteryPct: Int? = null,
+    /** Regen charge current into the battery as a % of base; null follows [regenPct]. */
+    val regenChargePct: Int? = null,
+    /** Max duty cycle in %, never above the base max duty. */
+    val maxDutyPct: Int? = null,
+    /** Cap on regen charging power. */
+    val regenCapKw: Double? = null,
+    /** ADC throttle curve exponent and acceleration / release ramp times (s); need [VehicleSettings.throttleControl]. */
+    val throttleExp: Double? = null,
+    val rampUpS: Double? = null,
+    val rampDownS: Double? = null,
 )
 
 @Serializable
@@ -92,6 +133,8 @@ enum class WidgetType(val label: String) {
     GAUGE("Gauge"),
     BAR("Bar"),
     GRAPH("Graph"),
+    /** Times a standing start to the speeds in [DashWidget.targets]. Custom ride screen only. */
+    ACCEL("Accel timer"),
 }
 
 @Serializable
@@ -108,6 +151,8 @@ data class DashWidget(
     val warn: Double? = null,
     val danger: Double? = null,
     val label: String? = null,
+    /** [WidgetType.ACCEL] only: speeds to time to, in display units. Empty = the default (see [accelTargets]). */
+    val targets: List<Double> = emptyList(),
 )
 
 @Serializable
